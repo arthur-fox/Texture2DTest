@@ -23,6 +23,8 @@ public class SelectImage : MonoBehaviour
     public void SetImageAndFilePath(byte[] textureStream, string filePath)
     {
         m_imageFilePath = filePath;
+
+        //BLOCK: This line causes synchronous block
         m_imageSphereTexture.LoadImage(textureStream);
 
         Debug.Log("------- VREEL: Finished Loading Image, texture width x height:  " + m_imageSphereTexture.width + " x " + m_imageSphereTexture.height);
@@ -41,6 +43,8 @@ public class SelectImage : MonoBehaviour
     public void SetImageAndFilePath(ref WWW www, string filePath)
     {
         m_imageFilePath = filePath;
+
+        //BLOCK: This line causes synchronous block
         www.LoadImageIntoTexture(m_imageSphereTexture);
 
         StartCoroutine(AnimateSetTexture());

@@ -12,7 +12,6 @@ public class DeviceGallery : MonoBehaviour
     private int m_currPictureIndex = 0;
     private List<string> m_pictureFilePaths;
     private static readonly List<string> ImageExtensions = new List<string> { ".JPG", ".JPE", ".BMP", ".GIF", ".PNG" };
-    //private System.Threading.Thread m_thread;
     private CoroutineQueue coroutineQueue;
 
     public void Start()
@@ -38,10 +37,10 @@ public class DeviceGallery : MonoBehaviour
     {
         Debug.Log("------- VREEL: OpenAndroidGallery() called");
 
-        // This is only Gear 360 images! I need to figure out how to find all 360 images regardless of where they live in the device
         m_currPictureIndex = 0;
         m_pictureFilePaths.Clear();
-        string path = "/storage/emulated/0/DCIM/Gear 360/";
+        string path = "/storage/emulated/0/DCIM/Gear 360/"; //HARDCODED: Hardcoded path to 360 images, 
+                                                            //this may need to be changed depending on device used
 
         Debug.Log("------- VREEL: Storing all FilePaths from directory: " + path);
 
@@ -93,63 +92,11 @@ public class DeviceGallery : MonoBehaviour
     {        
         Debug.Log("------- VREEL: Loading from filePath: " + filePath);
 
-        // NOTE: When I keep calling www.texture it will crash due to multiple allocations!
-
         WWW www = new WWW("file://" + filePath);
-        //string path = "/storage/emulated/0/DCIM/Gear 360/SAM_100_0093.jpg";
-        //WWW www = new WWW("file://" + path);
-        //string url = "http://lookingglass.services/wp-content/uploads/2016/06/360panorama.jpg"; // 950KB
-        //string url = "https://upload.wikimedia.org/wikipedia/commons/6/6f/Helvellyn_Striding_Edge_360_Panorama,_Lake_District_-_June_09.jpg"; // 9.3MB
-        //WWW www = new WWW(url);
         yield return www;
 
-        //UnityWebRequest uwr = new UnityWebRequest(url);
-        /*
-        UnityWebRequest uwr = new UnityWebRequest("file://" + filePath);
-        DownloadHandlerTexture textureDownloadHandler = new DownloadHandlerTexture(true);
-        uwr.downloadHandler = textureDownloadHandler;
-        yield return uwr.Send();
-        if(uwr.isError) 
-        {
-            Debug.Log("------- VREEL: Error on loading texture");
-            yield break;
-        }
-
-        Texture2D t = textureDownloadHandler.texture;
-        Debug.Log("------- VREEL: Downloaded texture of size height x width: " + t.height + " x " + t.width);
-        */
-
-        //ResourceRequest request = Resources.LoadAsync(filePath);
-        //yield return request;
-        //m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(request.asset as Texture2D, filePath);
-
-        //byte[] fileByteData = File.ReadAllBytes(filePath); // make sure to have Write Access: External (SDCard)
-        //Texture2D texture = new Texture2D(2, 2);
-        //texture.LoadImage(fileByteData);
-
-        //coroutineQueue.EnqueueAction(LoadPicturesInternal2(www.texture, filePath, sphereIndex));
-        //coroutineQueue.EnqueueWait(2.0f);
-
-        //Debug.Log("------- VREEL: Loaded data into texture");
-
-        // TODO: Make the copying of www.texture into this function call not block! 
-        //Debug.Log("------- VREEL: Calling SetImageAndFilePath which will block on copying texture of size height x width: " + www.texture.height + " x " + www.texture.width);
-        //m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(ref www, filePath);
-        m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(www.texture, filePath);
-
-        /*
-        SelectImage currImageSphere = m_imageSpheres[sphereIndex].GetComponent<SelectImage>();
-
-        System.Threading.Thread tempThread = new Thread(() => 
-            currImageSphere.SetImageAndFilePath(www.texture, filePath));
-
-        tempThread.Start();
-        yield return tempThread.Join();
-        */
-
-        //Debug.Log("------- VREEL: Set texture on ImageSphere");
-
-        Resources.UnloadUnusedAssets();
+        // BLOCK: This calls through to the offending code
+        m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(www, filePath);
     }
 
     private IEnumerator LoadPicturesInternal2(Texture2D source, string filePath, int sphereIndex)

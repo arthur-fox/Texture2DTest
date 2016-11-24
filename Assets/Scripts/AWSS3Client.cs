@@ -6,10 +6,6 @@ using Amazon;                       // UnityInitializer
 using Amazon.CognitoIdentity;       // CognitoAWSCredentials
 using Amazon.S3;                    // AmazonS3Client
 using Amazon.S3.Model;              // ListBucketsRequest
-/*
-using Amazon.S3.Util;
-using Amazon.Runtime;
-*/
 
 public class AWSS3Client : MonoBehaviour 
 {   
@@ -67,7 +63,7 @@ public class AWSS3Client : MonoBehaviour
             {
                 Debug.Log("------- VREEL: Got Response, printing now!");
 
-                responseObject.Response.S3Objects.ForEach((s3object) => //NOTE: Making this into a seperate function seemed more work than worth
+                responseObject.Response.S3Objects.ForEach((s3object) =>
                 {
                     if (ImageExtensions.Contains(Path.GetExtension(s3object.Key).ToUpperInvariant())) // Check that the file is indeed an image
                     {   
@@ -183,7 +179,6 @@ public class AWSS3Client : MonoBehaviour
         // The following is generally coming out to around 6-7MB in size...
         Debug.Log("------- VREEL: Finished iterating, length of byte[] is " + myBinary.Length);
 
-        // TODO: Make copying texture not block!
         m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(myBinary, fullFilePath);
         yield return new WaitForEndOfFrame();
 
