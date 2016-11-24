@@ -179,6 +179,7 @@ public class AWSS3Client : MonoBehaviour
         // The following is generally coming out to around 6-7MB in size...
         Debug.Log("------- VREEL: Finished iterating, length of byte[] is " + myBinary.Length);
 
+        // BLOCK: This calls through to the offending code
         m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(myBinary, fullFilePath);
         yield return new WaitForEndOfFrame();
 

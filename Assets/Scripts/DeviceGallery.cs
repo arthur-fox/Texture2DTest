@@ -96,7 +96,7 @@ public class DeviceGallery : MonoBehaviour
         yield return www;
 
         // BLOCK: This calls through to the offending code
-        m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(www, filePath);
+        m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(ref www, filePath);
     }
 
     private IEnumerator LoadPicturesInternal2(Texture2D source, string filePath, int sphereIndex)
