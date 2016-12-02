@@ -10,5 +10,6 @@ How it works:
 
 
 Note:
+ - Download the free open-source software Blender in order for the the project to build correctly: https://www.blender.org/download/
  - In order to have the “Device” button work correctly you will need to build an Android version of the project and point the hardcoded path to one that exists on your device (search for “HARDCODED” in “DeviceGallery.cs” to replace the path).
  - The two cases of offending code that construct a Texture2D and hence block the main thread can be found in the “SelectImage” script. Simply search for “BLOCK” and you’ll find them. Stick a breakpoint on both lines, and when it hits you’ll be able to trace back up the call stack to see what the loading code is doing if needed.
