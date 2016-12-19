@@ -1,11 +1,12 @@
 ﻿using UnityEngine;
-using System.Collections;            //IEnumerator
-using System.Collections.Generic;   // List
-using System.IO;                    // Stream
-using Amazon;                       // UnityInitializer
-using Amazon.CognitoIdentity;       // CognitoAWSCredentials
-using Amazon.S3;                    // AmazonS3Client
-using Amazon.S3.Model;              // ListBucketsRequest
+using System.Runtime.InteropServices; //DllImport
+using System.Collections;             //IEnumerator
+using System.Collections.Generic;     // List
+using System.IO;                      // Stream
+using Amazon;                         // UnityInitializer
+using Amazon.CognitoIdentity;         // CognitoAWSCredentials
+using Amazon.S3;                      // AmazonS3Client
+using Amazon.S3.Model;                // ListBucketsRequest
 
 public class AWSS3Client : MonoBehaviour 
 {   
@@ -19,6 +20,13 @@ public class AWSS3Client : MonoBehaviour
     private List<string> m_s3ImageFilePaths;
     private static readonly List<string> ImageExtensions = new List<string> { ".JPG", ".JPE", ".BMP", ".GIF", ".PNG" };
     private CoroutineQueue coroutineQueue;
+
+    // TODO: Get CPP Plugin to work
+    /*
+    [DllImport ("native-lib")]
+    [DllImport ("libnative-lib.so")]
+    private static extern int MyPluginInt();
+    */
 
     void Start() 
 	{
@@ -49,7 +57,14 @@ public class AWSS3Client : MonoBehaviour
     }
 
     public void DownloadAllImages()
-    {
+    {   
+        // TODO: Get CPP Plugin to work
+        /*
+        Debug.Log("------- VREEL: About to call MyPluginInt()");
+        int i = MyPluginInt();
+        Debug.Log("------- VREEL: Testing MyPluginInt() result: " + i);
+        */
+
         Debug.Log("------- VREEL: Fetching all the Objects from" + m_s3BucketName);
 
         var request = new ListObjectsRequest()
