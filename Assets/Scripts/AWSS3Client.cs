@@ -21,12 +21,8 @@ public class AWSS3Client : MonoBehaviour
     private static readonly List<string> ImageExtensions = new List<string> { ".JPG", ".JPE", ".BMP", ".GIF", ".PNG" };
     private CoroutineQueue coroutineQueue;
 
-    // TODO: Get CPP Plugin to work
-    /*
-    [DllImport ("native-lib")]
-    [DllImport ("libnative-lib.so")]
-    private static extern int MyPluginInt();
-    */
+    [DllImport ("androidcppnative")] // androidCppNative plugin!
+    private static extern int MyPluginInt(); // TEMPORARY FUNCTIONALITY
 
     void Start() 
 	{
@@ -57,13 +53,12 @@ public class AWSS3Client : MonoBehaviour
     }
 
     public void DownloadAllImages()
-    {   
-        // TODO: Get CPP Plugin to work
-        /*
+    {           
+        // TEMPORARY FUNCTIONALITY
         Debug.Log("------- VREEL: About to call MyPluginInt()");
         int i = MyPluginInt();
         Debug.Log("------- VREEL: Testing MyPluginInt() result: " + i);
-        */
+
 
         Debug.Log("------- VREEL: Fetching all the Objects from" + m_s3BucketName);
 
