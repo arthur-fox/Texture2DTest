@@ -1,12 +1,15 @@
 ﻿using UnityEngine;
-using System.Runtime.InteropServices; //DllImport
-using System.Collections;             //IEnumerator
+using System;                         // IntPtr
+using System.Runtime.InteropServices; // DllImport
+using System.Collections;             // IEnumerator
 using System.Collections.Generic;     // List
 using System.IO;                      // Stream
 using Amazon;                         // UnityInitializer
 using Amazon.CognitoIdentity;         // CognitoAWSCredentials
 using Amazon.S3;                      // AmazonS3Client
 using Amazon.S3.Model;                // ListBucketsRequest
+
+using System.Threading;               // Threading
 
 public class AWSS3Client : MonoBehaviour 
 {   
@@ -19,10 +22,20 @@ public class AWSS3Client : MonoBehaviour
     private int m_currS3ImageIndex = 0;
     private List<string> m_s3ImageFilePaths;
     private static readonly List<string> ImageExtensions = new List<string> { ".JPG", ".JPE", ".BMP", ".GIF", ".PNG" };
-    private CoroutineQueue coroutineQueue;
+    private CoroutineQueue coroutineQueue;   
 
-    [DllImport ("androidcppnative")] // androidCppNative plugin!
-    private static extern int MyPluginInt(); // TEMPORARY FUNCTIONALITY
+    // androidCppNative - C++ Plugin declerations
+    [DllImport ("androidcppnative")]
+    private static extern int CalcImageDimensions(IntPtr rawDataPtr, int length);
+
+    [DllImport ("androidcppnative")]
+    private static extern int GetImageWidth();
+
+    [DllImport ("androidcppnative")]
+    private static extern int GetImageHeight();
+
+    [DllImport ("androidcppnative")]
+    private static extern int PluginThreadFunc(IntPtr rawDataPtr, IntPtr resultPtr, int length);
 
     void Start() 
 	{
@@ -54,12 +67,6 @@ public class AWSS3Client : MonoBehaviour
 
     public void DownloadAllImages()
     {           
-        // TEMPORARY FUNCTIONALITY
-        Debug.Log("------- VREEL: About to call MyPluginInt()");
-        int i = MyPluginInt();
-        Debug.Log("------- VREEL: Testing MyPluginInt() result: " + i);
-
-
         Debug.Log("------- VREEL: Fetching all the Objects from" + m_s3BucketName);
 
         var request = new ListObjectsRequest()
@@ -158,7 +165,7 @@ public class AWSS3Client : MonoBehaviour
     }
 
     private IEnumerator ConvertStreamAndSetImage(Amazon.S3.Model.GetObjectResponse response, int sphereIndex, string fullFilePath)
-    {
+    {        
         Debug.Log("------- VREEL: ConvertStreamAndSetImage for " + fullFilePath);
 
         const int kNumIterationsPerFrame = 100;
@@ -186,11 +193,53 @@ public class AWSS3Client : MonoBehaviour
             }
         }
 
+
+        // ------- WIP -------
+        Debug.Log("------- VREEL: WIP - start of code section...");
+
+        GCHandle rawDataHandle = GCHandle.Alloc(myBinary, GCHandleType.Pinned);
+        IntPtr rawDataPtr = rawDataHandle.AddrOfPinnedObject();
+
+        Debug.Log("------- VREEL: About to call CalcImageDimensions()");
+        CalcImageDimensions(rawDataPtr, myBinary.Length);
+        Debug.Log("------- VREEL: Successfully called Plugin with a result of Width x Height = " + GetImageWidth() + " x " + GetImageHeight());
+
+        Texture2D myNewTexture2D = new Texture2D(GetImageWidth(), GetImageHeight());
+
+        Color32[] pixels = myNewTexture2D.GetPixels32(0);
+        GCHandle pixelsDataHandle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
+        IntPtr pixelsPtr = pixelsDataHandle.AddrOfPinnedObject();
+
+        Debug.Log("------- VREEL: About to run PluginThreadFunc()");
+        int returnValue = 0;
+        PluginThreadFunc(rawDataPtr, pixelsPtr, myBinary.Length);
+
+        /*
+        System.Threading.Thread tempThread = new Thread(() => 
+            returnValue = PluginThreadFunc(rawDataPtr, pixelsPtr, myBinary.Length)
+        );
+
+        tempThread.Start();
+        tempThread.Join();
+        */
+        Debug.Log("------- VREEL: Successfully ran PluginThreadFunc() with a return of numChannels = " + returnValue);
+
+        myNewTexture2D.SetPixels32(pixels);
+        myNewTexture2D.Apply();
+        Debug.Log("------- VREEL: Called SetPixels() and Apply() on myNewTexture2D!");
+
+        rawDataHandle.Free();
+
+        m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(myNewTexture2D, fullFilePath);
+        Debug.Log("------- VREEL: WIP - end of code section...");
+        // ------- WIP -------
+
+
         // The following is generally coming out to around 6-7MB in size...
         Debug.Log("------- VREEL: Finished iterating, length of byte[] is " + myBinary.Length);
 
         // BLOCK: This calls through to the offending code
-        m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(myBinary, fullFilePath);
+        //m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(myBinary, fullFilePath);
         yield return new WaitForEndOfFrame();
 
         Debug.Log("------- VREEL: Finished Setting Image!");
