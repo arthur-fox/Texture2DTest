@@ -9,7 +9,7 @@ using Amazon.CognitoIdentity;         // CognitoAWSCredentials
 using Amazon.S3;                      // AmazonS3Client
 using Amazon.S3.Model;                // ListBucketsRequest
 
-using System.Threading;               // Threading
+//using System.Linq;  // Take
 
 public class AWSS3Client : MonoBehaviour 
 {   
@@ -26,7 +26,7 @@ public class AWSS3Client : MonoBehaviour
 
     // androidCppNative - C++ Plugin declerations
     [DllImport ("androidcppnative")]
-    private static extern int CalcImageDimensions(IntPtr rawDataPtr, int length);
+    private static extern bool CalcAndSetDimensionsFromImageData(IntPtr rawDataPtr, int length);
 
     [DllImport ("androidcppnative")]
     private static extern int GetImageWidth();
@@ -35,7 +35,7 @@ public class AWSS3Client : MonoBehaviour
     private static extern int GetImageHeight();
 
     [DllImport ("androidcppnative")]
-    private static extern int PluginThreadFunc(IntPtr rawDataPtr, IntPtr resultPtr, int length);
+    private static extern bool LoadImageDataIntoPixels(IntPtr rawDataPtr, IntPtr resultPtr, int length);
 
     void Start() 
 	{
@@ -171,97 +171,132 @@ public class AWSS3Client : MonoBehaviour
     {        
         Debug.Log("------- VREEL: ConvertStreamAndSetImage for " + fullFilePath);
 
-        const int kNumIterationsPerFrame = 50;
+
+        Debug.Log("------- VREEL: Calling ToByteArray(), on background thread!");
+        bool ranJobSuccessfully = false;
         byte[] myBinary = null;
-        byte[] buf = new byte[1024];
         using (var stream = response.ResponseStream)
-        {            
-            using( MemoryStream ms = new MemoryStream() )
-            {
-                int iterations = 0;
-                int byteCount = 0;
-                do
-                {                    
-                    byteCount = stream.Read(buf, 0, 1024);
-                    ms.Write(buf, 0, byteCount);
-                    iterations++;
-                    if (iterations % kNumIterationsPerFrame == 0)
-                    {                        
-                        yield return new WaitForEndOfFrame();
-                    }
-                }
-                while(stream.CanRead && byteCount > 0);
-
-                myBinary = ms.ToArray();
-            }
+        {   
+            m_threadJob.Start( () => 
+                ranJobSuccessfully = ToByteArray(stream, ref myBinary)
+            );
+            yield return StartCoroutine(m_threadJob.WaitFor());
         }
+        yield return new WaitForEndOfFrame();
+        Debug.Log("------- VREEL: Finished ToByteArray(), ran Job Successully = " + ranJobSuccessfully); 
 
 
-        // ------- WIP -------
-        Debug.Log("------- VREEL: WIP - start of code section...");
-
+        Debug.Log("------- VREEL: Calling CalcAndSetDimensionsFromImageData(), on background thread!");
         GCHandle rawDataHandle = GCHandle.Alloc(myBinary, GCHandleType.Pinned);
         IntPtr rawDataPtr = rawDataHandle.AddrOfPinnedObject();
 
-        Debug.Log("------- VREEL: About to call CalcImageDimensions()");
-        CalcImageDimensions(rawDataPtr, myBinary.Length);
-        Debug.Log("------- VREEL: Successfully called Plugin with a result of Width x Height = " + GetImageWidth() + " x " + GetImageHeight());
+        ranJobSuccessfully = false;
+        m_threadJob.Start( () => 
+            ranJobSuccessfully = CalcAndSetDimensionsFromImageData(rawDataPtr, myBinary.Length)
+        );
+        yield return StartCoroutine(m_threadJob.WaitFor());
+        Debug.Log("------- VREEL: Finished CalcAndSetDimensionsFromImageData(), ran Job Successully = " + ranJobSuccessfully); 
 
+
+        Debug.Log("------- VREEL: BLOCKING OPERATION START - Creating Texture unfortunately blocks, size of Texture is Width x Height = " + GetImageWidth() + " x " + GetImageHeight());
+        yield return new WaitForEndOfFrame();
         Texture2D myNewTexture2D = new Texture2D(GetImageWidth(), GetImageHeight());
+        yield return new WaitForEndOfFrame();
+        Debug.Log("------- VREEL: BLOCKING OPERATION END - Created Creation!");
 
+
+        Debug.Log("------- VREEL: Calling LoadDataIntoPixels(), on background thread!");
         Color32[] pixels = myNewTexture2D.GetPixels32(0);
         GCHandle pixelsDataHandle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
         IntPtr pixelsPtr = pixelsDataHandle.AddrOfPinnedObject();
+        yield return new WaitForEndOfFrame();
 
-        Debug.Log("------- VREEL: About to run PluginThreadFunc()");
-        int returnValue = 0;
-
+        ranJobSuccessfully = false;
         m_threadJob.Start( () => 
-            returnValue = PluginThreadFunc(rawDataPtr, pixelsPtr, myBinary.Length) 
+            ranJobSuccessfully = LoadImageDataIntoPixels(rawDataPtr, pixelsPtr, myBinary.Length) 
         );
-        yield return StartCoroutine(m_threadJob.WaitFor()); // Wait until the Threading Job above has finished
+        yield return StartCoroutine(m_threadJob.WaitFor());
+        Debug.Log("------- VREEL: Finished LoadDataIntoPixels(), ran Job Successully = " + ranJobSuccessfully);
 
-        Debug.Log("------- VREEL: Successfully ran PluginThreadFunc() with a return Width*Height = " + returnValue);
 
+        Debug.Log("------- VREEL: Calling SetPixels32() and Apply()");
         myNewTexture2D.SetPixels32(pixels);
+        yield return new WaitForEndOfFrame();
         myNewTexture2D.Apply();
-        Debug.Log("------- VREEL: Called SetPixels() and Apply() on myNewTexture2D!");
-
+        yield return new WaitForEndOfFrame();
         rawDataHandle.Free();
+        yield return new WaitForEndOfFrame();
+        Debug.Log("------- VREEL: Finished SetPixels32() and Apply() on myNewTexture2D!");
 
+
+        Debug.Log("------- VREEL: Calling SetImageAndFilePath()");
         m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(myNewTexture2D, fullFilePath);
-        Debug.Log("------- VREEL: WIP - end of code section...");
-        // ------- WIP -------
-
-
-        // The following is generally coming out to around 6-7MB in size...
-        Debug.Log("------- VREEL: Finished iterating, length of byte[] is " + myBinary.Length);
-
-        // BLOCK: This calls through to the offending code
-        //m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(myBinary, fullFilePath);
         yield return new WaitForEndOfFrame();
 
         Debug.Log("------- VREEL: Finished Setting Image!");
-
         Resources.UnloadUnusedAssets();
     }
         
-    private byte[] ToByteArray(Stream stream)
-    {
-        byte[] b = null;
-        using( MemoryStream ms = new MemoryStream() )
-        {
-            int count = 0;
+    private bool ToByteArray(Stream stream, ref byte[] outBinary)
+    {                
+        const int kBlockSize = 1024;
+        byte[] buf = new byte[kBlockSize];
+        using( MemoryStream ms = new MemoryStream() ) 
+        {            
+            int byteCount = 0;
             do
             {
-                byte[] buf = new byte[1024];
-                count = stream.Read(buf, 0, 1024);
-                ms.Write(buf, 0, count);
-            } 
-            while(stream.CanRead && count > 0);
+                byteCount = stream.Read(buf, 0, kBlockSize);
+                ms.Write(buf, 0, byteCount);
+            }
+            while(stream.CanRead && byteCount > 0);
 
-            b = ms.ToArray();
+            outBinary = ms.ToArray();
         }
-        return b;
+
+        //Array.Reverse(outBinary, 0, outBinary.Length);
+
+        return true;
     }        
+
+
+    // Attempting to Get the Image facing the correct way up...
+    /*
+    private bool ToByteArrayReverse(Stream stream, ref byte[] outBinary)
+    {               
+        const int kBlockSize = 1024;
+
+        long currStreamPos = stream.Length;
+        stream.Seek(0, SeekOrigin.End);
+        byte[] buffer = new byte[kBlockSize];
+        int readLength = kBlockSize;
+        using( MemoryStream ms = new MemoryStream() ) 
+        {
+            int iteration = 0;
+
+            Debug.Log("------- VREEL: Pos = " + currStreamPos + " Iteration = " + iteration);
+            
+            while(currStreamPos > 0) 
+            {
+                readLength = (int)(currStreamPos < kBlockSize ? currStreamPos : kBlockSize);
+                currStreamPos -= readLength;
+                stream.Seek(currStreamPos, SeekOrigin.Begin);
+
+                int read = stream.Read(buffer, 0, readLength);
+                byte[] reversed = buffer.Take(read).Reverse().ToArray();
+                ms.Write(reversed, 0, read);
+
+                iteration++;
+                if (iteration % 100 == 0)
+                {
+                    Debug.Log("------- VREEL: Pos = " + currStreamPos + " Iteration = " + iteration);
+                }
+            } 
+                
+            outBinary = ms.ToArray();
+        }
+
+        return true;
+    }
+    */
 }

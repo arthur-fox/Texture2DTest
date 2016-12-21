@@ -42,12 +42,14 @@ public class ThreadJob
     public ThreadJob(MonoBehaviour threadJobOwner)
     {
         m_owner = threadJobOwner;
+        Debug.Log("------- VREEL: A ThreadJob was created by = " + m_owner.name);
     }
 
     public void Start(Func<object> threadFunc)
     {
         Debug.Log("------- VREEL: Start on Thread has been called!");
-
+        
+        IsDone = false;
         m_threadFunc = threadFunc;        
         m_thread = new System.Threading.Thread(Run);
         m_thread.Start();
@@ -72,10 +74,11 @@ public class ThreadJob
 
     private void Run()
     {
-        IsDone = false;
+        Debug.Log("------- VREEL: Began Running function on background thread!");
+
         m_threadFunc();
         IsDone = true;
 
-        Debug.Log("------- VREEL: Finished Running function on background thread called:");
+        Debug.Log("------- VREEL: Finished Running function on background thread!");
     }
 }
