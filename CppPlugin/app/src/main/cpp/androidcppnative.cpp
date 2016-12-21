@@ -37,7 +37,15 @@ bool LoadImageDataIntoPixels(void* pRawData, void* pPixelData, int dataLength)
     int width = -1, height = -1, type = -1;
 
     stbi_uc* image = stbi_load_from_memory(pDataAddress, dataLength, &width, &height, &type, 4);
-    memcpy(pReturnAddress, image, width*height*4);
+    //memcpy(pReturnAddress, image, width*height*4);
+
+    int pixels = width*height;
+    int* dest = (int*)pReturnAddress;
+    for(int* src = ((int*)image) + (pixels-1); src >= ((int*)image); --src)
+    {
+        *dest = *src;
+        ++dest;
+    }
     stbi_image_free(image);
 
     return (width*height) > 0;

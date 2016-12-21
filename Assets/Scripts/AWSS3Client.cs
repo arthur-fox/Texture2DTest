@@ -254,49 +254,6 @@ public class AWSS3Client : MonoBehaviour
             outBinary = ms.ToArray();
         }
 
-        //Array.Reverse(outBinary, 0, outBinary.Length);
-
-        return true;
-    }        
-
-
-    // Attempting to Get the Image facing the correct way up...
-    /*
-    private bool ToByteArrayReverse(Stream stream, ref byte[] outBinary)
-    {               
-        const int kBlockSize = 1024;
-
-        long currStreamPos = stream.Length;
-        stream.Seek(0, SeekOrigin.End);
-        byte[] buffer = new byte[kBlockSize];
-        int readLength = kBlockSize;
-        using( MemoryStream ms = new MemoryStream() ) 
-        {
-            int iteration = 0;
-
-            Debug.Log("------- VREEL: Pos = " + currStreamPos + " Iteration = " + iteration);
-            
-            while(currStreamPos > 0) 
-            {
-                readLength = (int)(currStreamPos < kBlockSize ? currStreamPos : kBlockSize);
-                currStreamPos -= readLength;
-                stream.Seek(currStreamPos, SeekOrigin.Begin);
-
-                int read = stream.Read(buffer, 0, readLength);
-                byte[] reversed = buffer.Take(read).Reverse().ToArray();
-                ms.Write(reversed, 0, read);
-
-                iteration++;
-                if (iteration % 100 == 0)
-                {
-                    Debug.Log("------- VREEL: Pos = " + currStreamPos + " Iteration = " + iteration);
-                }
-            } 
-                
-            outBinary = ms.ToArray();
-        }
-
         return true;
     }
-    */
 }
