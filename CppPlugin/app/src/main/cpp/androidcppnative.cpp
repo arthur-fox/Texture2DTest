@@ -34,16 +34,11 @@ int PluginThreadFunc(void* pRawData, void* pReturnData, int dataLength)
     stbi_uc* pReturnAddress = (stbi_uc*) pReturnData;
     int width = -1, height = -1, type = -1;
 
-    // These Printf's aren't appearing in LogCat unfortunately =/
-    //fprintf(stdout, "VREEL PLUGIN 1 - STDOUT");
-    //fprintf(stderr, "VREEL PLUGIN 2 - STDERR");
-    //freopen("VReelDebug.txt", "a", stdout);
-    //printf("SVREEL PLUGIN 3 - DEBUG\n");
-    //fprintf(stdout, "VREEL PLUGIN 4 - STDOUT");
+    stbi_uc* image = stbi_load_from_memory(pDataAddress, dataLength, &width, &height, &type, 4);
+    memcpy(pReturnAddress, image, width*height*4);
+    stbi_image_free(image);
 
-    // Type returns 3 channels. I've tried setting the final component to 0, 3, 4 but it doesn't fix the problem...
-    pReturnAddress = stbi_load_from_memory(pDataAddress, dataLength, &width, &height, &type, 0);
-    return type; //(width*height);
+    return (width*height);
 }
 
 std::string MyPluginString()

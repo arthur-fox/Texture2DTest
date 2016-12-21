@@ -21,8 +21,8 @@ public class AWSS3Client : MonoBehaviour
 
     private int m_currS3ImageIndex = 0;
     private List<string> m_s3ImageFilePaths;
-    private static readonly List<string> ImageExtensions = new List<string> { ".JPG", ".JPE", ".BMP", ".GIF", ".PNG" };
-    private CoroutineQueue coroutineQueue;   
+    private CoroutineQueue m_coroutineQueue;
+    private ThreadJob m_threadJob; 
 
     // androidCppNative - C++ Plugin declerations
     [DllImport ("androidcppnative")]
@@ -49,8 +49,10 @@ public class AWSS3Client : MonoBehaviour
 
         m_s3ImageFilePaths = new List<string>();
 
-        coroutineQueue = new CoroutineQueue( this );
-        coroutineQueue.StartLoop();
+        m_coroutineQueue = new CoroutineQueue( this );
+        m_coroutineQueue.StartLoop();
+
+        m_threadJob = new ThreadJob( this );
 	}
 
     public bool IsIndexAtStart()
@@ -65,6 +67,7 @@ public class AWSS3Client : MonoBehaviour
         return m_currS3ImageIndex >= (numFiles - numImageSpheres);       
     }
 
+    private static readonly List<string> ImageExtensions = new List<string> { ".JPG", ".JPE", ".BMP", ".GIF", ".PNG" };
     public void DownloadAllImages()
     {           
         Debug.Log("------- VREEL: Fetching all the Objects from" + m_s3BucketName);
@@ -145,8 +148,8 @@ public class AWSS3Client : MonoBehaviour
                 Debug.Log(logString02);
                 if (requestStillValid)
                 {
-                    coroutineQueue.EnqueueAction(ConvertStreamAndSetImage(response, sphereIndex, fullFilePath));
-                    coroutineQueue.EnqueueWait(2.0f);
+                    m_coroutineQueue.EnqueueAction(ConvertStreamAndSetImage(response, sphereIndex, fullFilePath));
+                    m_coroutineQueue.EnqueueWait(2.0f);
 
                     Debug.Log("------- VREEL: Successfully downloaded and set " + fullFilePath);
                 }
@@ -168,8 +171,9 @@ public class AWSS3Client : MonoBehaviour
     {        
         Debug.Log("------- VREEL: ConvertStreamAndSetImage for " + fullFilePath);
 
-        const int kNumIterationsPerFrame = 100;
+        const int kNumIterationsPerFrame = 50;
         byte[] myBinary = null;
+        byte[] buf = new byte[1024];
         using (var stream = response.ResponseStream)
         {            
             using( MemoryStream ms = new MemoryStream() )
@@ -177,8 +181,7 @@ public class AWSS3Client : MonoBehaviour
                 int iterations = 0;
                 int byteCount = 0;
                 do
-                {
-                    byte[] buf = new byte[1024];
+                {                    
                     byteCount = stream.Read(buf, 0, 1024);
                     ms.Write(buf, 0, byteCount);
                     iterations++;
@@ -186,7 +189,7 @@ public class AWSS3Client : MonoBehaviour
                     {                        
                         yield return new WaitForEndOfFrame();
                     }
-                } 
+                }
                 while(stream.CanRead && byteCount > 0);
 
                 myBinary = ms.ToArray();
@@ -212,17 +215,13 @@ public class AWSS3Client : MonoBehaviour
 
         Debug.Log("------- VREEL: About to run PluginThreadFunc()");
         int returnValue = 0;
-        PluginThreadFunc(rawDataPtr, pixelsPtr, myBinary.Length);
 
-        /*
-        System.Threading.Thread tempThread = new Thread(() => 
-            returnValue = PluginThreadFunc(rawDataPtr, pixelsPtr, myBinary.Length)
+        m_threadJob.Start( () => 
+            returnValue = PluginThreadFunc(rawDataPtr, pixelsPtr, myBinary.Length) 
         );
+        yield return StartCoroutine(m_threadJob.WaitFor()); // Wait until the Threading Job above has finished
 
-        tempThread.Start();
-        tempThread.Join();
-        */
-        Debug.Log("------- VREEL: Successfully ran PluginThreadFunc() with a return of numChannels = " + returnValue);
+        Debug.Log("------- VREEL: Successfully ran PluginThreadFunc() with a return Width*Height = " + returnValue);
 
         myNewTexture2D.SetPixels32(pixels);
         myNewTexture2D.Apply();

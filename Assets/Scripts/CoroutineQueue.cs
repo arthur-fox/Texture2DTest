@@ -7,6 +7,7 @@ public class CoroutineQueue
     MonoBehaviour m_Owner = null;
     Coroutine m_InternalCoroutine = null;
     Queue<IEnumerator> actions = new Queue<IEnumerator>();
+
     public CoroutineQueue(MonoBehaviour aCoroutineOwner)
     {
         m_Owner = aCoroutineOwner;
