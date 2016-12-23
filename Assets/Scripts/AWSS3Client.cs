@@ -1,6 +1,4 @@
 ﻿using UnityEngine;
-using System;                         // IntPtr
-using System.Runtime.InteropServices; // DllImport
 using System.Collections;             // IEnumerator
 using System.Collections.Generic;     // List
 using System.IO;                      // Stream
@@ -8,8 +6,6 @@ using Amazon;                         // UnityInitializer
 using Amazon.CognitoIdentity;         // CognitoAWSCredentials
 using Amazon.S3;                      // AmazonS3Client
 using Amazon.S3.Model;                // ListBucketsRequest
-
-//using System.Linq;  // Take
 
 public class AWSS3Client : MonoBehaviour 
 {   
@@ -22,20 +18,8 @@ public class AWSS3Client : MonoBehaviour
     private int m_currS3ImageIndex = 0;
     private List<string> m_s3ImageFilePaths;
     private CoroutineQueue m_coroutineQueue;
-    private ThreadJob m_threadJob; 
-
-    // androidCppNative - C++ Plugin declerations
-    [DllImport ("androidcppnative")]
-    private static extern bool CalcAndSetDimensionsFromImageData(IntPtr rawDataPtr, int length);
-
-    [DllImport ("androidcppnative")]
-    private static extern int GetImageWidth();
-
-    [DllImport ("androidcppnative")]
-    private static extern int GetImageHeight();
-
-    [DllImport ("androidcppnative")]
-    private static extern bool LoadImageDataIntoPixels(IntPtr rawDataPtr, IntPtr resultPtr, int length);
+    private ThreadJob m_threadJob;
+    private CppPlugin m_cppPlugin;
 
     void Start() 
 	{
@@ -49,10 +33,11 @@ public class AWSS3Client : MonoBehaviour
 
         m_s3ImageFilePaths = new List<string>();
 
-        m_coroutineQueue = new CoroutineQueue( this );
+        m_coroutineQueue = new CoroutineQueue(this);
         m_coroutineQueue.StartLoop();
 
-        m_threadJob = new ThreadJob( this );
+        m_threadJob = new ThreadJob(this);
+        m_cppPlugin = new CppPlugin(this);
 	}
 
     public bool IsIndexAtStart()
@@ -148,7 +133,7 @@ public class AWSS3Client : MonoBehaviour
                 Debug.Log(logString02);
                 if (requestStillValid)
                 {
-                    m_coroutineQueue.EnqueueAction(ConvertStreamAndSetImage(response, sphereIndex, fullFilePath));
+                    m_coroutineQueue.EnqueueAction(LoadImageInternal(response, sphereIndex, fullFilePath));
                     m_coroutineQueue.EnqueueWait(2.0f);
 
                     Debug.Log("------- VREEL: Successfully downloaded and set " + fullFilePath);
@@ -167,93 +152,13 @@ public class AWSS3Client : MonoBehaviour
         });
     }
 
-    private IEnumerator ConvertStreamAndSetImage(Amazon.S3.Model.GetObjectResponse response, int sphereIndex, string fullFilePath)
+    private IEnumerator LoadImageInternal(Amazon.S3.Model.GetObjectResponse response, int sphereIndex, string fullFilePath)
     {        
         Debug.Log("------- VREEL: ConvertStreamAndSetImage for " + fullFilePath);
 
-
-        Debug.Log("------- VREEL: Calling ToByteArray(), on background thread!");
-        bool ranJobSuccessfully = false;
-        byte[] myBinary = null;
         using (var stream = response.ResponseStream)
-        {   
-            m_threadJob.Start( () => 
-                ranJobSuccessfully = ToByteArray(stream, ref myBinary)
-            );
-            yield return StartCoroutine(m_threadJob.WaitFor());
+        {
+            yield return m_cppPlugin.LoadImageFromStream(m_threadJob, stream, m_imageSpheres, sphereIndex, fullFilePath);
         }
-        yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: Finished ToByteArray(), ran Job Successully = " + ranJobSuccessfully); 
-
-
-        Debug.Log("------- VREEL: Calling CalcAndSetDimensionsFromImageData(), on background thread!");
-        GCHandle rawDataHandle = GCHandle.Alloc(myBinary, GCHandleType.Pinned);
-        IntPtr rawDataPtr = rawDataHandle.AddrOfPinnedObject();
-
-        ranJobSuccessfully = false;
-        m_threadJob.Start( () => 
-            ranJobSuccessfully = CalcAndSetDimensionsFromImageData(rawDataPtr, myBinary.Length)
-        );
-        yield return StartCoroutine(m_threadJob.WaitFor());
-        Debug.Log("------- VREEL: Finished CalcAndSetDimensionsFromImageData(), ran Job Successully = " + ranJobSuccessfully); 
-
-
-        Debug.Log("------- VREEL: BLOCKING OPERATION START - Creating Texture unfortunately blocks, size of Texture is Width x Height = " + GetImageWidth() + " x " + GetImageHeight());
-        yield return new WaitForEndOfFrame();
-        Texture2D myNewTexture2D = new Texture2D(GetImageWidth(), GetImageHeight());
-        yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: BLOCKING OPERATION END - Created Creation!");
-
-
-        Debug.Log("------- VREEL: Calling LoadDataIntoPixels(), on background thread!");
-        Color32[] pixels = myNewTexture2D.GetPixels32(0);
-        GCHandle pixelsDataHandle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
-        IntPtr pixelsPtr = pixelsDataHandle.AddrOfPinnedObject();
-        yield return new WaitForEndOfFrame();
-
-        ranJobSuccessfully = false;
-        m_threadJob.Start( () => 
-            ranJobSuccessfully = LoadImageDataIntoPixels(rawDataPtr, pixelsPtr, myBinary.Length) 
-        );
-        yield return StartCoroutine(m_threadJob.WaitFor());
-        Debug.Log("------- VREEL: Finished LoadDataIntoPixels(), ran Job Successully = " + ranJobSuccessfully);
-
-
-        Debug.Log("------- VREEL: Calling SetPixels32() and Apply()");
-        myNewTexture2D.SetPixels32(pixels);
-        yield return new WaitForEndOfFrame();
-        myNewTexture2D.Apply();
-        yield return new WaitForEndOfFrame();
-        rawDataHandle.Free();
-        yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: Finished SetPixels32() and Apply() on myNewTexture2D!");
-
-
-        Debug.Log("------- VREEL: Calling SetImageAndFilePath()");
-        m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(myNewTexture2D, fullFilePath);
-        yield return new WaitForEndOfFrame();
-
-        Debug.Log("------- VREEL: Finished Setting Image!");
-        Resources.UnloadUnusedAssets();
-    }
-        
-    private bool ToByteArray(Stream stream, ref byte[] outBinary)
-    {                
-        const int kBlockSize = 1024;
-        byte[] buf = new byte[kBlockSize];
-        using( MemoryStream ms = new MemoryStream() ) 
-        {            
-            int byteCount = 0;
-            do
-            {
-                byteCount = stream.Read(buf, 0, kBlockSize);
-                ms.Write(buf, 0, byteCount);
-            }
-            while(stream.CanRead && byteCount > 0);
-
-            outBinary = ms.ToArray();
-        }
-
-        return true;
     }
 }

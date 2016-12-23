@@ -20,32 +20,10 @@ public class SelectImage : MonoBehaviour
         return m_imageFilePath;
     }
 
-    public void SetImageAndFilePath(byte[] textureStream, string filePath)
-    {
-        m_imageFilePath = filePath;
-
-        //BLOCK: This line causes synchronous block
-        m_imageSphereTexture.LoadImage(textureStream);
-
-        Debug.Log("------- VREEL: Finished Loading Image, texture width x height:  " + m_imageSphereTexture.width + " x " + m_imageSphereTexture.height);
-
-        StartCoroutine(AnimateSetTexture());
-    }
-
     public void SetImageAndFilePath(Texture2D texture, string filePath)
     {
         m_imageFilePath = filePath;
         m_imageSphereTexture = texture;
-
-        StartCoroutine(AnimateSetTexture());
-    }
-
-    public void SetImageAndFilePath(ref WWW www, string filePath)
-    {
-        m_imageFilePath = filePath;
-
-        //BLOCK: This line causes synchronous block
-        www.LoadImageIntoTexture(m_imageSphereTexture);
 
         StartCoroutine(AnimateSetTexture());
     }

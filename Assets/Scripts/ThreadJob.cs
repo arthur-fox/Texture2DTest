@@ -39,9 +39,9 @@ public class ThreadJob
     // Public functions
     // **************************
 
-    public ThreadJob(MonoBehaviour threadJobOwner)
+    public ThreadJob(MonoBehaviour owner)
     {
-        m_owner = threadJobOwner;
+        m_owner = owner;
         Debug.Log("------- VREEL: A ThreadJob was created by = " + m_owner.name);
     }
 
