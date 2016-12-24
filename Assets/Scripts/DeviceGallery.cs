@@ -81,7 +81,7 @@ public class DeviceGallery : MonoBehaviour
             if (currPictureIndex < m_pictureFilePaths.Count)
             {                   
                 string filePath = m_pictureFilePaths[currPictureIndex];
-                m_coroutineQueue.EnqueueAction(LoadImageInternalUnity(filePath, sphereIndex));
+                m_coroutineQueue.EnqueueAction(LoadImageInternalPlugin(filePath, sphereIndex));
                 m_coroutineQueue.EnqueueWait(2.0f);
             }
             else

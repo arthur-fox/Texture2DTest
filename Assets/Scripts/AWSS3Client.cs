@@ -133,7 +133,7 @@ public class AWSS3Client : MonoBehaviour
                 Debug.Log(logString02);
                 if (requestStillValid)
                 {
-                    m_coroutineQueue.EnqueueAction(LoadImageInternal(response, sphereIndex, fullFilePath));
+                    m_coroutineQueue.EnqueueAction(LoadImageInternalPlugin(response, sphereIndex, fullFilePath));
                     m_coroutineQueue.EnqueueWait(2.0f);
 
                     Debug.Log("------- VREEL: Successfully downloaded and set " + fullFilePath);
@@ -152,7 +152,7 @@ public class AWSS3Client : MonoBehaviour
         });
     }
 
-    private IEnumerator LoadImageInternal(Amazon.S3.Model.GetObjectResponse response, int sphereIndex, string fullFilePath)
+    private IEnumerator LoadImageInternalPlugin(Amazon.S3.Model.GetObjectResponse response, int sphereIndex, string fullFilePath)
     {        
         Debug.Log("------- VREEL: ConvertStreamAndSetImage for " + fullFilePath);
 
@@ -160,5 +160,47 @@ public class AWSS3Client : MonoBehaviour
         {
             yield return m_cppPlugin.LoadImageFromStream(m_threadJob, stream, m_imageSpheres, sphereIndex, fullFilePath);
         }
+    }
+
+    private IEnumerator LoadImageInternalUnity(Amazon.S3.Model.GetObjectResponse response, int sphereIndex, string fullFilePath)
+    {
+        Debug.Log("------- VREEL: ConvertStreamAndSetImage for " + fullFilePath);
+
+        const int kNumIterationsPerFrame = 150;
+        byte[] myBinary = null;
+        using (var stream = response.ResponseStream)
+        {            
+            using( MemoryStream ms = new MemoryStream() )
+            {
+                int iterations = 0;
+                int byteCount = 0;
+                do
+                {
+                    byte[] buf = new byte[1024];
+                    byteCount = stream.Read(buf, 0, 1024);
+                    ms.Write(buf, 0, byteCount);
+                    iterations++;
+                    if (iterations % kNumIterationsPerFrame == 0)
+                    {                        
+                        yield return new WaitForEndOfFrame();
+                    }
+                } 
+                while(stream.CanRead && byteCount > 0);
+
+                myBinary = ms.ToArray();
+            }
+        }
+
+        // The following is generally coming out to around 6-7MB in size...
+        Debug.Log("------- VREEL: Finished iterating, length of byte[] is " + myBinary.Length);
+
+        Texture2D newImage = new Texture2D(2,2); 
+        newImage.LoadImage(myBinary);
+        m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(newImage, fullFilePath);
+        yield return new WaitForEndOfFrame();
+
+        Debug.Log("------- VREEL: Finished Setting Image!");
+
+        Resources.UnloadUnusedAssets();
     }
 }
