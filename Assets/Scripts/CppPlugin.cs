@@ -5,8 +5,6 @@ using System.IO;                      // Stream
 using System.Collections;             // IEnumerator
 using System.Runtime.InteropServices; // DllImport
 
-//TODO: This class should really just have static functions, 
-//      it shouldn't need to be instantiated!
 public class CppPlugin
 {
     // **************************
@@ -31,11 +29,18 @@ public class CppPlugin
     [DllImport ("androidcppnative")]
     private static extern bool LoadIntoPixelsFromImagePath(StringBuilder filePath, IntPtr resultPtr);
 
+
     // **************************
     // Member Variables
     // **************************
 
     private MonoBehaviour m_owner = null;
+
+    // WIP
+    private IntPtr m_pUnmanagedTextureMemory;
+    private const int kMaxTextureWidth = 8 * 1024; // 7200
+    private const int kMaxTextureHeight = 4 * 1024; // 3600
+    private Texture2D m_testTexture;   
 
     // **************************
     // Public functions
@@ -45,9 +50,87 @@ public class CppPlugin
     {
         m_owner = owner;
         Debug.Log("------- VREEL: A CppPlugin was created by = " + m_owner.name);
+
+        Screen.sleepTimeout = SleepTimeout.NeverSleep;
+
+        // WIP
+        // Allocate enough memory through Marshal.AllocHGlobal() to cater for the largest Texture size
+        int sizeOfUnmanagedMemoryBlock = kMaxTextureWidth * kMaxTextureHeight * Marshal.SizeOf(typeof(Color32));
+        m_pUnmanagedTextureMemory = Marshal.AllocHGlobal(sizeOfUnmanagedMemoryBlock + kMaxTextureWidth);
+
+        //m_testTexture = new Texture2D(kMaxTextureWidth, kMaxTextureHeight);
+        //m_pUnmanagedTextureMemory = m_testTexture.GetNativeTexturePtr();
     }
 
+
+
+    // WIP
     public IEnumerator LoadImageFromPath(ThreadJob threadJob, GameObject[] imageSpheres, int sphereIndex, string filePath)
+    {
+        Debug.Log("------- VREEL: Calling LoadPicturesInternal() from filePath: " + filePath);
+
+        Debug.Log("------- VREEL: Calling CalcAndSetDimensionsFromImagePath(), on background thread!");
+        StringBuilder filePathForCpp = new StringBuilder(filePath);
+        bool ranJobSuccessfully = false;
+        threadJob.Start( () => 
+            ranJobSuccessfully = CalcAndSetDimensionsFromImagePath(filePathForCpp)
+        );
+        yield return threadJob.WaitFor();
+        Debug.Log("------- VREEL: Finished CalcAndSetDimensionsFromImagePath(), ran Job Successully = " + ranJobSuccessfully); 
+
+
+        Debug.Log("------- VREEL: BLOCKING OPERATION START - Creating Texture unfortunately blocks, size of Texture is Width x Height = " + GetStoredImageWidth() + " x " + GetStoredImageHeight());
+        yield return new WaitForEndOfFrame();
+        m_testTexture =
+            Texture2D.CreateExternalTexture(
+                GetStoredImageWidth(), 
+                GetStoredImageHeight(), 
+                TextureFormat.ARGB32,          // Default textures have a format of ARGB32
+                false,
+                false,
+                m_pUnmanagedTextureMemory
+            );
+        yield return new WaitForEndOfFrame();
+        Debug.Log("------- VREEL: BLOCKING OPERATION END - Created Creation!");
+
+
+        Debug.Log("------- VREEL: Calling LoadIntoPixelsFromImagePath(), on background thread!");
+        Color32[] pixels = m_testTexture.GetPixels32(0);
+        GCHandle pixelsDataHandle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
+        IntPtr pixelsPtr = pixelsDataHandle.AddrOfPinnedObject();
+        yield return new WaitForEndOfFrame();
+
+        ranJobSuccessfully = false;
+        threadJob.Start( () => 
+            ranJobSuccessfully = LoadIntoPixelsFromImagePath(filePathForCpp, pixelsPtr)
+        );
+        yield return threadJob.WaitFor();
+        Debug.Log("------- VREEL: Finished LoadIntoPixelsFromImagePath(), ran Job Successully = " + ranJobSuccessfully);
+
+
+        Debug.Log("------- VREEL: Calling SetPixels32() and Apply()");
+        m_testTexture.SetPixels32(pixels);
+        yield return new WaitForEndOfFrame();
+        m_testTexture.Apply();
+        yield return new WaitForEndOfFrame();
+        pixelsDataHandle.Free();
+        yield return new WaitForEndOfFrame();
+        Debug.Log("------- VREEL: Finished SetPixels32() and Apply() on myNewTexture2D!");
+
+
+        Debug.Log("------- VREEL: BLOCKING OPERATION START - Calling SetImageAndFilePath()");
+        imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(m_testTexture, filePath);
+        yield return new WaitForEndOfFrame();
+        Debug.Log("------- VREEL: BLOCKING OPERATION END - Finished SetImageAndFilePath()");
+
+        Resources.UnloadUnusedAssets();
+    }
+    // WIP
+
+
+
+
+    public IEnumerator LoadImageFromPath_Original(ThreadJob threadJob, GameObject[] imageSpheres, int sphereIndex, string filePath)
     {
         Debug.Log("------- VREEL: Calling LoadPicturesInternal() from filePath: " + filePath);
 
@@ -91,10 +174,10 @@ public class CppPlugin
         Debug.Log("------- VREEL: Finished SetPixels32() and Apply() on myNewTexture2D!");
 
 
-        Debug.Log("------- VREEL: Calling SetImageAndFilePath()");
+        Debug.Log("------- VREEL: BLOCKING OPERATION START - Calling SetImageAndFilePath()");
         imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(myNewTexture2D, filePath);
         yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: Finished SetImageAndFilePath()");
+        Debug.Log("------- VREEL: BLOCKING OPERATION END - Finished SetImageAndFilePath()");
 
         Resources.UnloadUnusedAssets();
     }

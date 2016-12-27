@@ -37,6 +37,7 @@ void TransferPixelsFromSrcToDest(int* pImage, int* pDest, int width, int height)
 // Public functions
 // **************************
 
+
 int GetStoredImageWidth()
 {
     return imageWidth;
