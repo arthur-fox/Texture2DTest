@@ -12,6 +12,9 @@ public class CppPlugin
     // **************************
 
     [DllImport ("androidcppnative")]
+    private static extern int Init();
+
+    [DllImport ("androidcppnative")]
     private static extern int GetStoredImageWidth();
 
     [DllImport ("androidcppnative")]
@@ -51,6 +54,8 @@ public class CppPlugin
         m_owner = owner;
         Debug.Log("------- VREEL: A CppPlugin was created by = " + m_owner.name);
 
+        //Init();
+
         Screen.sleepTimeout = SleepTimeout.NeverSleep;
 
         // WIP
@@ -61,8 +66,7 @@ public class CppPlugin
         //m_testTexture = new Texture2D(kMaxTextureWidth, kMaxTextureHeight);
         //m_pUnmanagedTextureMemory = m_testTexture.GetNativeTexturePtr();
     }
-
-
+           
 
     // WIP
     public IEnumerator LoadImageFromPath(ThreadJob threadJob, GameObject[] imageSpheres, int sphereIndex, string filePath)

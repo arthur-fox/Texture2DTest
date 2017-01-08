@@ -15,8 +15,10 @@ public class DeviceGallery : MonoBehaviour
     private ThreadJob m_threadJob;
     private CppPlugin m_cppPlugin;
 
+    private AndroidJavaClass m_javaPlugin;
+
     public void Start()
-    {
+    {        
         m_pictureFilePaths = new List<string>();
 
         m_coroutineQueue = new CoroutineQueue(this);
@@ -24,6 +26,12 @@ public class DeviceGallery : MonoBehaviour
 
         m_threadJob = new ThreadJob(this);
         m_cppPlugin = new CppPlugin(this);
+
+        AndroidJNI.AttachCurrentThread();
+        m_javaPlugin = new AndroidJavaClass("com.DefaultCompany.Texture2DTest.JavaPlugin");
+
+        string imagesTopLevelDirectory = m_javaPlugin.CallStatic<string>("GetAndroidImagesPath");
+        Debug.Log("------- VREEL: TEST - " + imagesTopLevelDirectory);
     }
 
     public bool IsIndexAtStart()
