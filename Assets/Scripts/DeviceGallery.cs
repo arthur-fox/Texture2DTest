@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.Networking;           //UnityWebRequest
+using System;                           // IntPtr
 using System.IO;                        //DirectoryInfo
 using System.Collections;               //IEnumerator
 using System.Collections.Generic;       //List
@@ -14,7 +15,6 @@ public class DeviceGallery : MonoBehaviour
     private CoroutineQueue m_coroutineQueue;
     private ThreadJob m_threadJob;
     private CppPlugin m_cppPlugin;
-
     private AndroidJavaClass m_javaPlugin;
 
     public void Start()
@@ -29,9 +29,6 @@ public class DeviceGallery : MonoBehaviour
 
         AndroidJNI.AttachCurrentThread();
         m_javaPlugin = new AndroidJavaClass("com.DefaultCompany.Texture2DTest.JavaPlugin");
-
-        string imagesTopLevelDirectory = m_javaPlugin.CallStatic<string>("GetAndroidImagesPath");
-        Debug.Log("------- VREEL: TEST - " + imagesTopLevelDirectory);
     }
 
     public bool IsIndexAtStart()
@@ -89,7 +86,7 @@ public class DeviceGallery : MonoBehaviour
             if (currPictureIndex < m_pictureFilePaths.Count)
             {                   
                 string filePath = m_pictureFilePaths[currPictureIndex];
-                m_coroutineQueue.EnqueueAction(LoadImageInternalPlugin(filePath, sphereIndex));
+                m_coroutineQueue.EnqueueAction(LoadImageInternalPluginJava(filePath, sphereIndex));
                 m_coroutineQueue.EnqueueWait(2.0f);
             }
             else
@@ -101,9 +98,25 @@ public class DeviceGallery : MonoBehaviour
         Resources.UnloadUnusedAssets();
     }
 
-    private IEnumerator LoadImageInternalPlugin(string filePath, int sphereIndex)
+    private IEnumerator LoadImageInternalPluginCpp(string filePath, int sphereIndex)
     {   
         yield return m_cppPlugin.LoadImageFromPath(m_threadJob, m_imageSpheres, sphereIndex, filePath);
+    }
+
+    private IEnumerator LoadImageInternalPluginJava(string filePath, int sphereIndex)
+    {           
+        Texture2D myNewTexture2D = new Texture2D(1920, 1080, TextureFormat.RGBA32, false);
+
+        Debug.Log("------- VREEL: Calling LoadImageReturnTexturePtr()");
+        Int32 texturePtr = m_javaPlugin.Call <Int32> ("LoadImageReturnTexturePtr", filePath);
+        Debug.Log("------- VREEL: Finished LoadImageIntoTexture(), returned pointer: " + texturePtr);
+
+        Texture2D nativeTexture = Texture2D.CreateExternalTexture (1920, 1080, TextureFormat.RGBA32, false, false, (IntPtr)texturePtr);
+        myNewTexture2D.UpdateExternalTexture(nativeTexture.GetNativeTexturePtr());
+
+        m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(myNewTexture2D, filePath);
+
+        yield break;
     }
 
     private IEnumerator LoadImageInternalUnity(string filePath, int sphereIndex)
