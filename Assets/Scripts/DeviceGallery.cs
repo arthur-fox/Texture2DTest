@@ -100,6 +100,7 @@ public class DeviceGallery : MonoBehaviour
 
     private IEnumerator LoadImageInternalPluginCpp(string filePath, int sphereIndex)
     {   
+        Debug.Log("------- VREEL: Called LoadImageInternalPluginCpp()");
         yield return m_cppPlugin.LoadImageFromPath(m_threadJob, m_imageSpheres, sphereIndex, filePath);
     }
 

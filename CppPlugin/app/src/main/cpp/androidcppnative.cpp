@@ -6,6 +6,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+#include "Unity/IUnityGraphics.h"
+
 #define  LOG_TAG    "----------------- VREEL: libandroidcppnative"
 #define  LOGI(...)  __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
 
@@ -26,7 +28,8 @@ bool m_initialised = false;
 int m_imageWidth = 0;
 int m_imageHeight = 0;
 
-void* m_textureHandle;
+void* m_pTextureHandle;
+char m_pFilePath[50];
 
 // **************************
 // Helper functions
@@ -142,7 +145,7 @@ bool LoadIntoPixelsFromImageData(void* pRawData, void* pPixelData, int dataLengt
 
 void* LoadIntoTextureFromImagePath(char* pFileName)
 {
-    LOGI("Calling LoadIntoPixelsFromImagePath() in C++!");
+    LOGI("Calling LoadIntoPixelsFromImagePath() in C++ - with FileName = %s\n", pFileName);
 
     int width = -1, height = -1, type = -1;
 
@@ -152,36 +155,55 @@ void* LoadIntoTextureFromImagePath(char* pFileName)
     //glActiveTexture(GL_TEXTURE0);
     //glBindTexture(GL_TEXTURE_2D, textureId);
 
-    GLuint gltex = (GLuint)(size_t)(m_textureHandle);
+    
+    GLuint gltex = (GLuint)(size_t)(m_pTextureHandle);
     glBindTexture(GL_TEXTURE_2D, gltex);
+    PrintAllGlError();
 
     LOGI("Bound texture to Handle = %u \n", gltex);
 
     //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    stbi_uc* pImage = stbi_load(pFileName, &width, &height, &type, 4);
+    stbi_uc* pImage = stbi_load(pFileName, &width, &height, &type, 4); // Forcing 4-components per pixel RGBA
+    stbi_uc* pPixelData = new unsigned char[width * height * 4];
+    TransferPixelsFromSrcToDest((int*) pImage, (int*) pPixelData, width, height);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
-                 GL_UNSIGNED_BYTE, (unsigned char*) pImage);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*) pPixelData);
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*) pImage);
+    PrintAllGlError();
 
+    delete[] pPixelData;
     stbi_image_free(pImage);
 
+    m_imageWidth = width;
+    m_imageHeight = height;
     LOGI("Image had Width = %d, Height = %d, Type = %d\n", width, height, type);
 
     glBindTexture(GL_TEXTURE_2D, 0);
-
     PrintAllGlError();
+
     LOGI("Finished LoadIntoPixelsFromImagePath() in C++!");
 
-    return m_textureHandle;
+    return m_pTextureHandle;
 }
 
-void SetTextureVars(void* textureHandle, int width, int height)
+void SetTextureVars(void* textureHandle, int width, int height, char* pFileName)
 {
-    m_textureHandle = textureHandle;
+    m_pTextureHandle = textureHandle;
     //m_imageWidth = width;
     //m_imageHeight = height;
+    strcpy(m_pFilePath, pFileName);
+}
+
+static void UNITY_INTERFACE_API OnRenderEvent(int eventID)
+{
+    LoadIntoTextureFromImagePath(m_pFilePath);
+}
+
+UnityRenderingEvent UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderEventFunc()
+{
+    return OnRenderEvent;
 }
 
 jstring Java_com_soul_cppplugin_MainActivity_stringFromJNI(JNIEnv *env, jobject /* this */)

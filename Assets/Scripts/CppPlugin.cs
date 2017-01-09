@@ -37,7 +37,10 @@ public class CppPlugin
     private static extern IntPtr LoadIntoTextureFromImagePath(StringBuilder filePath);
 
     [DllImport ("androidcppnative")]
-    private static extern void SetTextureVars(IntPtr textureHandle, int width, int height);
+    private static extern void SetTextureVars(IntPtr textureHandle, int width, int height, StringBuilder filePath);
+
+    [DllImport ("androidcppnative")]
+    private static extern IntPtr GetRenderEventFunc();
     //WIP
 
     // **************************
@@ -72,8 +75,7 @@ public class CppPlugin
         m_pUnmanagedTextureMemory = Marshal.AllocHGlobal(sizeOfUnmanagedMemoryBlock + kMaxTextureWidth);
         */
 
-        m_testTexture = new Texture2D(kMaxTextureWidth, kMaxTextureHeight);
-        SetTextureVars(m_testTexture.GetNativeTexturePtr(), kMaxTextureWidth, kMaxTextureHeight);
+        m_testTexture = new Texture2D(kMaxTextureWidth, kMaxTextureHeight, TextureFormat.RGBA32, false);
         // WIP
     }
            
@@ -84,6 +86,7 @@ public class CppPlugin
         Debug.Log("------- VREEL: Calling LoadPicturesInternal() from filePath: " + filePath);
         StringBuilder filePathForCpp = new StringBuilder(filePath);
 
+        /*
         Debug.Log("------- VREEL: Calling CalcAndSetDimensionsFromImagePath(), on background thread!");
         bool ranJobSuccessfully = false;
         threadJob.Start( () => 
@@ -91,15 +94,21 @@ public class CppPlugin
         );
         yield return threadJob.WaitFor();
         Debug.Log("------- VREEL: Finished CalcAndSetDimensionsFromImagePath(), ran Job Successully = " + ranJobSuccessfully); 
+        */
 
         Debug.Log("------- VREEL: Calling LoadIntoPixelsFromImagePath(), on background thread!");
         yield return new WaitForEndOfFrame();
-        IntPtr textureHandle = IntPtr.Zero;
-        threadJob.Start( () => 
+        SetTextureVars(m_testTexture.GetNativeTexturePtr(), kMaxTextureWidth, kMaxTextureHeight, filePathForCpp);
+        GL.IssuePluginEvent(GetRenderEventFunc(), 1);
+
+        /*
+        threadJob.Start( () =>             
             textureHandle = LoadIntoTextureFromImagePath(filePathForCpp)
         );
         yield return threadJob.WaitFor();
-        Debug.Log("------- VREEL: Finished LoadIntoPixelsFromImagePath(), Texture Handle = " + textureHandle);
+        */
+        Debug.Log("------- VREEL: Finished LoadIntoPixelsFromImagePath(), Texture Handle = " + m_testTexture.GetNativeTexturePtr());
+
 
         Debug.Log("------- VREEL: Calling CreateExternalTexture(), size of Texture is Width x Height = " + GetStoredImageWidth() + " x " + GetStoredImageHeight());
         yield return new WaitForEndOfFrame();
@@ -110,7 +119,7 @@ public class CppPlugin
                 TextureFormat.RGBA32,           // This param seems wrong - Default textures have a format of ARGB32
                 false,
                 false,
-                textureHandle                   // m_testTexture.GetNativeTexturePtr()
+                m_testTexture.GetNativeTexturePtr()
             );
         yield return new WaitForEndOfFrame();
         Debug.Log("------- VREEL: Finished CreateExternalTexture(),!");
