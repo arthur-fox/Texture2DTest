@@ -25,6 +25,7 @@
 // **************************
 
 bool m_initialised = false;
+
 int m_imageWidth = 0;
 int m_imageHeight = 0;
 
@@ -89,6 +90,11 @@ void Init()
     }
 }
 
+void* GetStoredTexturePtr()
+{
+    return m_pTextureHandle;
+}
+
 int GetStoredImageWidth()
 {
     return m_imageWidth;
@@ -149,48 +155,44 @@ void* LoadIntoTextureFromImagePath(char* pFileName)
 
     int width = -1, height = -1, type = -1;
 
-    //GLuint textureId;
-    //glGenTextures(1, &textureId);
-
-    //glActiveTexture(GL_TEXTURE0);
-    //glBindTexture(GL_TEXTURE_2D, textureId);
-
-    
-    GLuint gltex = (GLuint)(size_t)(m_pTextureHandle);
-    glBindTexture(GL_TEXTURE_2D, gltex);
+    GLuint textureId;
+    glGenTextures(1, &textureId);
+    m_pTextureHandle = (void*) textureId;
     PrintAllGlError();
 
-    LOGI("Bound texture to Handle = %u \n", gltex);
+    LOGI("Genned texture to Handle = %u \n", textureId);
+
+    glBindTexture(GL_TEXTURE_2D, textureId);
+    PrintAllGlError();
 
     //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     stbi_uc* pImage = stbi_load(pFileName, &width, &height, &type, 4); // Forcing 4-components per pixel RGBA
-    stbi_uc* pPixelData = new unsigned char[width * height * 4];
+    stbi_uc* pPixelData = new unsigned char[width * height * sizeof(int32_t)];
     TransferPixelsFromSrcToDest((int*) pImage, (int*) pPixelData, width, height);
 
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*) pPixelData);
-    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*) pImage);
+    //glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*) pPixelData);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*) pPixelData);
     PrintAllGlError();
 
     delete[] pPixelData;
     stbi_image_free(pImage);
 
+    glBindTexture(GL_TEXTURE_2D, 0);
+    PrintAllGlError();
+
     m_imageWidth = width;
     m_imageHeight = height;
     LOGI("Image had Width = %d, Height = %d, Type = %d\n", width, height, type);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-    PrintAllGlError();
 
     LOGI("Finished LoadIntoPixelsFromImagePath() in C++!");
 
     return m_pTextureHandle;
 }
 
-void SetTextureVars(void* textureHandle, int width, int height, char* pFileName)
+void SetTextureVars(int width, int height, char* pFileName)
 {
-    m_pTextureHandle = textureHandle;
     //m_imageWidth = width;
     //m_imageHeight = height;
     strcpy(m_pFilePath, pFileName);

@@ -15,6 +15,9 @@ public class CppPlugin
     private static extern int Init();
 
     [DllImport ("androidcppnative")]
+    private static extern IntPtr GetStoredTexturePtr();
+
+    [DllImport ("androidcppnative")]
     private static extern int GetStoredImageWidth();
 
     [DllImport ("androidcppnative")]
@@ -37,7 +40,7 @@ public class CppPlugin
     private static extern IntPtr LoadIntoTextureFromImagePath(StringBuilder filePath);
 
     [DllImport ("androidcppnative")]
-    private static extern void SetTextureVars(IntPtr textureHandle, int width, int height, StringBuilder filePath);
+    private static extern void SetTextureVars(nt width, int height, StringBuilder filePath);
 
     [DllImport ("androidcppnative")]
     private static extern IntPtr GetRenderEventFunc();
@@ -50,7 +53,6 @@ public class CppPlugin
     private MonoBehaviour m_owner = null;
 
     // WIP
-    private Texture2D m_testTexture;
     private const int kMaxTextureWidth = 8 * 1024; // 7200
     private const int kMaxTextureHeight = 4 * 1024; // 3600
     // WIP
@@ -67,16 +69,6 @@ public class CppPlugin
         Init();
 
         Screen.sleepTimeout = SleepTimeout.NeverSleep;
-
-        // WIP
-        /*
-        // Allocate enough memory through Marshal.AllocHGlobal() to cater for the largest Texture size
-        int sizeOfUnmanagedMemoryBlock = kMaxTextureWidth * kMaxTextureHeight * Marshal.SizeOf(typeof(Color32));
-        m_pUnmanagedTextureMemory = Marshal.AllocHGlobal(sizeOfUnmanagedMemoryBlock + kMaxTextureWidth);
-        */
-
-        m_testTexture = new Texture2D(kMaxTextureWidth, kMaxTextureHeight, TextureFormat.RGBA32, false);
-        // WIP
     }
            
 
@@ -98,7 +90,7 @@ public class CppPlugin
 
         Debug.Log("------- VREEL: Calling LoadIntoPixelsFromImagePath(), on background thread!");
         yield return new WaitForEndOfFrame();
-        SetTextureVars(m_testTexture.GetNativeTexturePtr(), kMaxTextureWidth, kMaxTextureHeight, filePathForCpp);
+        SetTextureVars(kMaxTextureWidth, kMaxTextureHeight, filePathForCpp);
         GL.IssuePluginEvent(GetRenderEventFunc(), 1);
 
         /*
@@ -107,7 +99,7 @@ public class CppPlugin
         );
         yield return threadJob.WaitFor();
         */
-        Debug.Log("------- VREEL: Finished LoadIntoPixelsFromImagePath(), Texture Handle = " + m_testTexture.GetNativeTexturePtr());
+        Debug.Log("------- VREEL: Finished LoadIntoPixelsFromImagePath(), Texture Handle = " + GetStoredTexturePtr() );
 
 
         Debug.Log("------- VREEL: Calling CreateExternalTexture(), size of Texture is Width x Height = " + GetStoredImageWidth() + " x " + GetStoredImageHeight());
@@ -116,20 +108,13 @@ public class CppPlugin
             Texture2D.CreateExternalTexture(
                 GetStoredImageWidth(), 
                 GetStoredImageHeight(), 
-                TextureFormat.RGBA32,           // This param seems wrong - Default textures have a format of ARGB32
+                TextureFormat.RGBA32,           // Default textures have a format of ARGB32
                 false,
                 false,
-                m_testTexture.GetNativeTexturePtr()
+                GetStoredTexturePtr()           // m_testTexture.GetNativeTexturePtr()
             );
         yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: Finished CreateExternalTexture(),!");
-
-        /*
-        Debug.Log("------- VREEL: Calling Apply()");
-        testTexture.Apply();
-        yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: Finished Apply() on myNewTexture2D!");
-        */
+        Debug.Log("------- VREEL: Finished CreateExternalTexture()!");
 
         Debug.Log("------- VREEL: BLOCKING OPERATION START - Calling SetImageAndFilePath()");
         imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(testTexture, filePath);
