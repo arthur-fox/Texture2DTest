@@ -86,7 +86,7 @@ public class DeviceGallery : MonoBehaviour
             if (currPictureIndex < m_pictureFilePaths.Count)
             {                   
                 string filePath = m_pictureFilePaths[currPictureIndex];
-                m_coroutineQueue.EnqueueAction(LoadImageInternalPluginJava(filePath, sphereIndex));
+                m_coroutineQueue.EnqueueAction(LoadImageInternalPluginCpp(filePath, sphereIndex));
                 m_coroutineQueue.EnqueueWait(2.0f);
             }
             else

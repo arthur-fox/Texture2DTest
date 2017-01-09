@@ -40,6 +40,8 @@ find_library( # Sets the name of the path variable.
 target_link_libraries( # Specifies the target library.
                        androidcppnative
 
-                       # Links the target library to the log library
-                       # included in the NDK.
-                       ${log-lib} )
+                       # Links the target library to the following libraries
+                       ${log-lib}
+                      android
+                      EGL
+                      GLESv2)
