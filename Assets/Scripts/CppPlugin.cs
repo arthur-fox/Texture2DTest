@@ -12,9 +12,6 @@ public class CppPlugin
     // **************************
 
     [DllImport ("androidcppnative")]
-    private static extern int Init();
-
-    [DllImport ("androidcppnative")]
     private static extern IntPtr GetStoredTexturePtr();
 
     [DllImport ("androidcppnative")]
@@ -37,10 +34,7 @@ public class CppPlugin
 
     //WIP
     [DllImport ("androidcppnative")]
-    private static extern IntPtr LoadIntoTextureFromImagePath(StringBuilder filePath);
-
-    [DllImport ("androidcppnative")]
-    private static extern void SetTextureVars(nt width, int height, StringBuilder filePath);
+    private static extern bool LoadIntoWorkingMemoryFromImagePath(StringBuilder filePath);
 
     [DllImport ("androidcppnative")]
     private static extern IntPtr GetRenderEventFunc();
@@ -52,10 +46,12 @@ public class CppPlugin
 
     private MonoBehaviour m_owner = null;
 
-    // WIP
-    private const int kMaxTextureWidth = 8 * 1024; // 7200
-    private const int kMaxTextureHeight = 4 * 1024; // 3600
-    // WIP
+    // These are functions that use OpenGL and hence must be run from the Render Thread!
+    enum RenderFunctions
+    {
+        kInit = 0,
+        kLoadIntoTextureFromWorkingMemory = 1
+    };
 
     // **************************
     // Public functions
@@ -66,11 +62,20 @@ public class CppPlugin
         m_owner = owner;
         Debug.Log("------- VREEL: A CppPlugin was created by = " + m_owner.name);
 
-        Init();
+        GL.IssuePluginEvent(GetRenderEventFunc(), (int)RenderFunctions.kInit);
 
         Screen.sleepTimeout = SleepTimeout.NeverSleep;
     }
            
+
+    // FUNCTION ORDER:
+    // - INIT() - Gen textures + allocate memory
+    // - LoadIntoWorkingMemoryFromImagePath(filePathForCpp) - image pixels are now in memory
+    // - LoadIntoTextureFromWorkingMemory()
+
+    // CURRENT PROBLEMS:
+    // - The texture being created with CreateExternalTexture() is being copied (so we run into the same old synchronous problem)
+    // - Currently I'm not doing any chuncking, i'm simply calling glTexImage2D() on the Render Thread [I'm not sure how big a problem this is]
 
     // WIP
     public IEnumerator LoadImageFromPath(ThreadJob threadJob, GameObject[] imageSpheres, int sphereIndex, string filePath)
@@ -78,29 +83,28 @@ public class CppPlugin
         Debug.Log("------- VREEL: Calling LoadPicturesInternal() from filePath: " + filePath);
         StringBuilder filePathForCpp = new StringBuilder(filePath);
 
-        /*
-        Debug.Log("------- VREEL: Calling CalcAndSetDimensionsFromImagePath(), on background thread!");
+        Debug.Log("------- VREEL: Calling LoadIntoWorkingMemoryFromImagePath(), on background thread!");
         bool ranJobSuccessfully = false;
         threadJob.Start( () => 
-            ranJobSuccessfully = CalcAndSetDimensionsFromImagePath(filePathForCpp)
+            ranJobSuccessfully = LoadIntoWorkingMemoryFromImagePath(filePathForCpp)
         );
         yield return threadJob.WaitFor();
-        Debug.Log("------- VREEL: Finished CalcAndSetDimensionsFromImagePath(), ran Job Successully = " + ranJobSuccessfully); 
-        */
+        Debug.Log("------- VREEL: Finished LoadIntoWorkingMemoryFromImagePath(), ran Job Successully = " + ranJobSuccessfully); 
 
-        Debug.Log("------- VREEL: Calling LoadIntoPixelsFromImagePath(), on background thread!");
+        //yield return new WaitForSeconds(10); // This is here to see if there's a frameout caused from above function...
+
+        Debug.Log("------- VREEL: Calling kLoadIntoTextureFromWorkingMemory(), on background thread!");
         yield return new WaitForEndOfFrame();
-        SetTextureVars(kMaxTextureWidth, kMaxTextureHeight, filePathForCpp);
-        GL.IssuePluginEvent(GetRenderEventFunc(), 1);
-
+        GL.IssuePluginEvent(GetRenderEventFunc(), (int)RenderFunctions.kLoadIntoTextureFromWorkingMemory);
         /*
         threadJob.Start( () =>             
             textureHandle = LoadIntoTextureFromImagePath(filePathForCpp)
         );
         yield return threadJob.WaitFor();
         */
-        Debug.Log("------- VREEL: Finished LoadIntoPixelsFromImagePath(), Texture Handle = " + GetStoredTexturePtr() );
+        Debug.Log("------- VREEL: Finished kLoadIntoTextureFromWorkingMemory(), Texture Handle = " + GetStoredTexturePtr() );
 
+        //yield return new WaitForSeconds(10); // This is here to see if there's a frameout caused from above function...
 
         Debug.Log("------- VREEL: Calling CreateExternalTexture(), size of Texture is Width x Height = " + GetStoredImageWidth() + " x " + GetStoredImageHeight());
         yield return new WaitForEndOfFrame();
@@ -111,7 +115,7 @@ public class CppPlugin
                 TextureFormat.RGBA32,           // Default textures have a format of ARGB32
                 false,
                 false,
-                GetStoredTexturePtr()           // m_testTexture.GetNativeTexturePtr()
+                GetStoredTexturePtr()
             );
         yield return new WaitForEndOfFrame();
         Debug.Log("------- VREEL: Finished CreateExternalTexture()!");
