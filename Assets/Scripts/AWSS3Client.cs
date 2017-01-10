@@ -133,7 +133,7 @@ public class AWSS3Client : MonoBehaviour
                 Debug.Log(logString02);
                 if (requestStillValid)
                 {
-                    m_coroutineQueue.EnqueueAction(LoadImageInternalPlugin(response, sphereIndex, fullFilePath));
+                    m_coroutineQueue.EnqueueAction(LoadImageInternalCppPlugin(response, sphereIndex, fullFilePath));
                     m_coroutineQueue.EnqueueWait(2.0f);
 
                     Debug.Log("------- VREEL: Successfully downloaded and set " + fullFilePath);
@@ -152,7 +152,7 @@ public class AWSS3Client : MonoBehaviour
         });
     }
 
-    private IEnumerator LoadImageInternalPlugin(Amazon.S3.Model.GetObjectResponse response, int sphereIndex, string fullFilePath)
+    private IEnumerator LoadImageInternalCppPlugin(Amazon.S3.Model.GetObjectResponse response, int sphereIndex, string fullFilePath)
     {        
         Debug.Log("------- VREEL: ConvertStreamAndSetImage for " + fullFilePath);
 

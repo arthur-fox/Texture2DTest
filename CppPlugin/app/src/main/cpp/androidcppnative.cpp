@@ -21,10 +21,10 @@
 // Member Variables
 // **************************
 
-int kMaxImageWidth = 10 * 1024;
-int kMaxImageHeight = 5 * 1024;
+const int kMaxImageWidth = 10 * 1024;
+const int kMaxImageHeight = 5 * 1024;
 
-bool m_initialised = false;
+int m_numInits = 0; // Acts a bit like a reference counter, ensuring only 1 Init() and 1 Terminate() allowed
 
 int m_imageWidth = 0;
 int m_imageHeight = 0;
@@ -60,7 +60,7 @@ static void CheckGlError(const char* op)
 }
 
 // Image pixels coming from stb_image.h are upside-down and back-to-front, this function corrects that
-void CorrectImageAlignment(int* pImage, int* pDest, int width, int height)
+void TransferAndCorrectAlignmentFromSrcToDest(int* pImage, int* pDest, int width, int height)
 {
     int numPixels = width*height;
     for(int* pSrc = pImage + (numPixels-1); pSrc >= pImage; pSrc -= width)
@@ -81,12 +81,21 @@ void CorrectImageAlignment(int* pImage, int* pDest, int width, int height)
 enum RenderFunctions
 {
     kInit = 0,
-    kLoadIntoTextureFromWorkingMemory = 1
+    kLoadIntoTextureFromWorkingMemory = 1,
+    kTerminate = 2
 };
+
+// DELETE ME
+//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+//stbi_info(pFileName, &m_imageWidth, &m_imageHeight, &type);
+//stbi_info_from_memory(pAddress, dataLength, &m_imageWidth, &m_imageHeight, &type);
+// DELETE ME
 
 void Init()
 {
-    if (!m_initialised)
+    if (m_numInits == 0)
     {
         LOGI("Calling Init() in C++ Plugin!");
 
@@ -99,11 +108,23 @@ void Init()
 
         m_pWorkingMemory = new stbi_uc[kMaxImageWidth * kMaxImageHeight * sizeof(int32_t)];
 
-        //delete[] pPixelData;
-        //stbi_image_free(pImage);
-
         LOGI("Finished Init() in C++ Plugin!");
-        m_initialised = true;
+    }
+
+    m_numInits++;
+}
+
+void Terminate()
+{
+    m_numInits--;
+
+    if (m_numInits == 0)
+    {
+        LOGI("Calling Terminate() in C++ Plugin!");
+
+        delete[] m_pWorkingMemory;
+
+        LOGI("Finished Terminate() in C++ Plugin!");
     }
 }
 
@@ -115,9 +136,6 @@ void LoadIntoTextureFromWorkingMemory()
     GLuint textureId = (GLuint)(size_t) m_pTextureHandle;
     glBindTexture(GL_TEXTURE_2D, textureId);
     PrintAllGlError();
-
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     //glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*) pPixelData);
     LOGI("glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_imageWidth, m_imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*) m_pWorkingMemory)");
@@ -150,7 +168,7 @@ static void UNITY_INTERFACE_API OnRenderEvent(int eventID)
 extern "C"
 {
 
-UnityRenderingEvent UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API GetRenderEventFunc()
+UnityRenderingEvent GetRenderEventFunc() //UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API
 {
     return OnRenderEvent;
 }
@@ -178,7 +196,7 @@ bool LoadIntoWorkingMemoryFromImagePath(char* pFileName)
     m_imageWidth = 0, m_imageHeight = 0;
 
     stbi_uc* pImage = stbi_load(pFileName, &m_imageWidth, &m_imageHeight, &type, 4); // Forcing 4-components per pixel RGBA
-    CorrectImageAlignment((int*) pImage, (int*) m_pWorkingMemory, m_imageWidth, m_imageHeight);
+    TransferAndCorrectAlignmentFromSrcToDest((int*) pImage, (int*) m_pWorkingMemory, m_imageWidth, m_imageHeight);
     stbi_image_free(pImage);
 
     LOGI("Image Loaded has Width = %d, Height = %d, Type = %d\n", m_imageWidth, m_imageHeight, type);
@@ -188,53 +206,23 @@ bool LoadIntoWorkingMemoryFromImagePath(char* pFileName)
     return (m_imageWidth*m_imageHeight) > 0;
 }
 
-
-// BELOW ARE OLD FUNCTIONS
-bool CalcAndSetDimensionsFromImagePath(char* pFileName)
+bool LoadIntoWorkingMemoryFromImageData(void* pRawData, int dataLength)
 {
-    m_imageWidth = m_imageHeight = 0;
-    int type;
+    LOGI("Calling LoadIntoWorkingMemoryFromImageData() in C++ Plugin");
 
-    stbi_info(pFileName, &m_imageWidth, &m_imageHeight, &type);
+    int type = -1;
+    m_imageWidth = 0, m_imageHeight = 0;
+
+    stbi_uc* pImage = stbi_load_from_memory((stbi_uc*) pRawData, dataLength, &m_imageWidth, &m_imageHeight, &type, 4); // Forcing 4-components per pixel RGBA
+    TransferAndCorrectAlignmentFromSrcToDest((int*) pImage, (int*) m_pWorkingMemory, m_imageWidth, m_imageHeight);
+    stbi_image_free(pImage);
+
+    LOGI("Image Loaded has Width = %d, Height = %d, Type = %d\n", m_imageWidth, m_imageHeight, type);
+
+    LOGI("Finished LoadIntoWorkingMemoryFromImageData() in C++ Plugin!");
 
     return (m_imageWidth*m_imageHeight) > 0;
 }
-
-bool CalcAndSetDimensionsFromImageData(void* pRawData, int dataLength)
-{
-    m_imageWidth = m_imageHeight = 0;
-    stbi_uc* pAddress = (stbi_uc*) pRawData;
-    int type;
-
-    stbi_info_from_memory(pAddress, dataLength, &m_imageWidth, &m_imageHeight, &type);
-
-    return (m_imageWidth*m_imageHeight) > 0;
-}
-
-bool LoadIntoPixelsFromImagePath(char* pFileName, void* pPixelData)
-{
-    int width = -1, height = -1, type = -1;
-
-    stbi_uc* pImage = stbi_load(pFileName, &width, &height, &type, 4);
-    CorrectImageAlignment((int*) pImage, (int*) pPixelData, width, height);
-    stbi_image_free(pImage);
-
-    return (width*height) > 0;
-}
-
-bool LoadIntoPixelsFromImageData(void* pRawData, void* pPixelData, int dataLength)
-{
-    stbi_uc* pDataAddress = (stbi_uc*) pRawData;
-    int width = -1, height = -1, type = -1;
-
-    stbi_uc* pImage = stbi_load_from_memory(pDataAddress, dataLength, &width, &height, &type, 4);
-    CorrectImageAlignment((int*) pImage, (int*) pPixelData, width, height);
-    stbi_image_free(pImage);
-
-    return (width*height) > 0;
-}
-// ABOVE ARE OLD FUNCTIONS
-
 
 jstring Java_com_soul_cppplugin_MainActivity_stringFromJNI(JNIEnv *env, jobject /* this */)
 {
