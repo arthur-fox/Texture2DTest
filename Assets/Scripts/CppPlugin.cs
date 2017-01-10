@@ -70,15 +70,21 @@ public class CppPlugin
     // - LoadIntoTextureFromWorkingMemory()
 
     // CURRENT PROBLEMS:
-    // - The texture being created with CreateExternalTexture() is being copied (so we run into the same old synchronous problem)
-    // - Currently I'm not doing any chuncking, i'm simply calling glTexImage2D() on the Render Thread [I'm not sure how big a problem this is]
+    // - Currently I'm not doing any chuncking, I'm simply calling glTexImage2D() on the Render Thread [I'm not sure how big a problem this is]
+    // - The work that goes in before calling LoadPicturesInternal() puts us out of frame before even entering the function!
+    // - UNSURE ABOUT THIS -> The texture being created with CreateExternalTexture() is being copied (so we run into the same old synchronous problem)
+
+    // FIXED PROBLEMS:
+    // - threadJob.Start() no longer causes a frameout, as I'm now using "ThreadPool"
 
     public IEnumerator LoadImageFromPath(ThreadJob threadJob, GameObject[] imageSpheres, int sphereIndex, string filePath)
     {
+        yield return new WaitForEndOfFrame();
         Debug.Log("------- VREEL: Calling LoadPicturesInternal() from filePath: " + filePath);
         StringBuilder filePathForCpp = new StringBuilder(filePath);
 
         Debug.Log("------- VREEL: Calling LoadIntoWorkingMemoryFromImagePath(), on background thread!");
+        yield return threadJob.WaitFor();
         bool ranJobSuccessfully = false;
         threadJob.Start( () => 
             ranJobSuccessfully = LoadIntoWorkingMemoryFromImagePath(filePathForCpp)
@@ -86,9 +92,10 @@ public class CppPlugin
         yield return threadJob.WaitFor();
         Debug.Log("------- VREEL: Finished LoadIntoWorkingMemoryFromImagePath(), ran Job Successully = " + ranJobSuccessfully); 
 
-        //yield return new WaitForSeconds(10); // This is here to see if there's a frameout caused from above function...
+        Debug.Log("------- VREEL: Waiting for 5 seconds!");
+        yield return new WaitForSeconds(5); // This is here to see if there's a frameout caused from above function...
 
-        Debug.Log("------- VREEL: Calling kLoadIntoTextureFromWorkingMemory(), on background thread!");
+        Debug.Log("------- VREEL: Calling LoadIntoTextureFromWorkingMemory()");
         yield return new WaitForEndOfFrame();
         GL.IssuePluginEvent(GetRenderEventFunc(), (int)RenderFunctions.kLoadIntoTextureFromWorkingMemory);
         /*
@@ -97,9 +104,10 @@ public class CppPlugin
         );
         yield return threadJob.WaitFor();
         */
-        Debug.Log("------- VREEL: Finished kLoadIntoTextureFromWorkingMemory(), Texture Handle = " + GetStoredTexturePtr() );
+        Debug.Log("------- VREEL: Finished LoadIntoTextureFromWorkingMemory(), Texture Handle = " + GetStoredTexturePtr() );
 
-        //yield return new WaitForSeconds(10); // This is here to see if there's a frameout caused from above function...
+        Debug.Log("------- VREEL: Waiting for 5 seconds!");
+        yield return new WaitForSeconds(5); // This is here to see if there's a frameout caused from above function...
 
         Debug.Log("------- VREEL: Calling CreateExternalTexture(), size of Texture is Width x Height = " + GetStoredImageWidth() + " x " + GetStoredImageHeight());
         yield return new WaitForEndOfFrame();
@@ -116,31 +124,36 @@ public class CppPlugin
         Debug.Log("------- VREEL: Finished CreateExternalTexture()!");
 
 
-        Debug.Log("------- VREEL: BLOCKING OPERATION START - Calling SetImageAndFilePath()");
+        Debug.Log("------- VREEL: Calling SetImageAndFilePath()");
         imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(newTexture, filePath);
         yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: BLOCKING OPERATION END - Finished SetImageAndFilePath()");
+        Debug.Log("------- VREEL: Finished SetImageAndFilePath()");
 
         Resources.UnloadUnusedAssets();
     }   
 
     public IEnumerator LoadImageFromStream(ThreadJob threadJob, Stream imageStream, GameObject[] imageSpheres, int sphereIndex, string filePath)
     {        
+        yield return new WaitForEndOfFrame();
         Debug.Log("------- VREEL: ConvertStreamAndSetImage for " + filePath);
 
         Debug.Log("------- VREEL: Calling ToByteArray(), on background thread!");
+        yield return threadJob.WaitFor();
         bool ranJobSuccessfully = false;
         byte[] myBinary = null;
         threadJob.Start( () => 
             ranJobSuccessfully = ToByteArray(imageStream, ref myBinary)
         );
-        yield return threadJob.WaitFor(); //yield return StartCoroutine(m_threadJob.WaitFor());
+        yield return threadJob.WaitFor();
         Debug.Log("------- VREEL: Finished ToByteArray(), ran Job Successully = " + ranJobSuccessfully); 
 
+        Debug.Log("------- VREEL: Waiting for 5 seconds!");
+        yield return new WaitForSeconds(5); // This is here to see if there's a frameout caused from above function...
 
         Debug.Log("------- VREEL: Calling LoadIntoWorkingMemoryFromImagePath(), on background thread!");
         GCHandle rawDataHandle = GCHandle.Alloc(myBinary, GCHandleType.Pinned);
         IntPtr rawDataPtr = rawDataHandle.AddrOfPinnedObject();
+        yield return threadJob.WaitFor();
         ranJobSuccessfully = false;
         threadJob.Start( () => 
             ranJobSuccessfully = LoadIntoWorkingMemoryFromImageData(rawDataPtr, myBinary.Length)
@@ -149,6 +162,8 @@ public class CppPlugin
         rawDataHandle.Free();
         Debug.Log("------- VREEL: Finished LoadIntoWorkingMemoryFromImagePath(), ran Job Successully = " + ranJobSuccessfully); 
 
+        Debug.Log("------- VREEL: Waiting for 5 seconds!");
+        yield return new WaitForSeconds(5); // This is here to see if there's a frameout caused from above function...
 
         Debug.Log("------- VREEL: Calling LoadIntoTextureFromWorkingMemory(), on background thread!");
         yield return new WaitForEndOfFrame();
@@ -161,6 +176,8 @@ public class CppPlugin
         */
         Debug.Log("------- VREEL: Finished LoadIntoTextureFromWorkingMemory(), Texture Handle = " + GetStoredTexturePtr() );
 
+        Debug.Log("------- VREEL: Waiting for 5 seconds!");
+        yield return new WaitForSeconds(5); // This is here to see if there's a frameout caused from above function...
 
         Debug.Log("------- VREEL: Calling CreateExternalTexture(), size of Texture is Width x Height = " + GetStoredImageWidth() + " x " + GetStoredImageHeight());
         yield return new WaitForEndOfFrame();

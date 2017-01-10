@@ -4,8 +4,8 @@ using System.Collections;            //IEnumerator
 public class SelectImage : MonoBehaviour 
 {
     public float m_scalingFactor = 0.88f;
+    public float m_defaultScale = 1.0f;
 
-    private float m_defaultScale = 1.0f;
     private Texture2D m_imageSphereTexture;
     private string m_imageFilePath; 
     private string kEmptyString = "emptyString";

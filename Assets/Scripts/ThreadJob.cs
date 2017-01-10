@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using System;                   // Func
 using System.Collections;       // IEnumerator
+using System.Threading;         // Thread
 
 public class ThreadJob
 {
@@ -29,9 +30,8 @@ public class ThreadJob
         }
     }
 
-    private bool m_isDoneFlag = false;
+    private bool m_isDoneFlag = true;
     private object m_handle = new object();
-    private System.Threading.Thread m_thread = null;
     private MonoBehaviour m_owner = null;
     private Func<object> m_threadFunc;
 
@@ -48,18 +48,14 @@ public class ThreadJob
     public void Start(Func<object> threadFunc)
     {
         Debug.Log("------- VREEL: Start on Thread has been called!");
-        
+
+        //TODO: Make the ThreadFunc have its own "IsDone" flag, 
+        //      because the current method means that only one ThreadFunc is allowed to run at a time...
+        m_threadFunc = threadFunc;
         IsDone = false;
-        m_threadFunc = threadFunc;        
-        m_thread = new System.Threading.Thread(Run);
-        m_thread.Start();
+        ThreadPool.QueueUserWorkItem(Run);
     }
 
-    public void Abort()
-    {
-        m_thread.Abort();
-    }        
-        
     public IEnumerator WaitFor()
     {
         while(!IsDone)
@@ -72,7 +68,7 @@ public class ThreadJob
     // Private/Helper functions
     // **************************
 
-    private void Run()
+    private void Run(object stateInfo)
     {
         Debug.Log("------- VREEL: Began Running function on background thread!");
 

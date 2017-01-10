@@ -23,6 +23,7 @@
 
 const int kMaxImageWidth = 10 * 1024;
 const int kMaxImageHeight = 5 * 1024;
+const int kMaxPixelsPerUpload = 10 * 1024 * 1024;
 
 int m_numInits = 0; // Acts a bit like a reference counter, ensuring only 1 Init() and 1 Terminate() allowed
 
@@ -137,10 +138,24 @@ void LoadIntoTextureFromWorkingMemory()
     glBindTexture(GL_TEXTURE_2D, textureId);
     PrintAllGlError();
 
-    //glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*) pPixelData);
-    LOGI("glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_imageWidth, m_imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*) m_pWorkingMemory)");
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_imageWidth, m_imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*) m_pWorkingMemory);
+    LOGI("glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_imageWidth, m_imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL");
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_imageWidth, m_imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_imageWidth, m_imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*) m_pWorkingMemory);
     PrintAllGlError();
+
+    unsigned int* pImage = (unsigned int*) m_pWorkingMemory;
+
+    // Each iteration we upload a certain number of scanlines, up until the last one where we only do the remaining scanlines
+    const GLint kNumberOfScanlinesToUpload = kMaxPixelsPerUpload/m_imageWidth;
+    for (GLint yOffset = 0; yOffset < m_imageHeight; yOffset += kNumberOfScanlinesToUpload)
+    {
+        GLsizei height = (yOffset + kNumberOfScanlinesToUpload < m_imageHeight) ? kNumberOfScanlinesToUpload : (m_imageHeight - yOffset);
+
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, yOffset, m_imageWidth, height, GL_RGBA, GL_UNSIGNED_BYTE, pImage);
+        PrintAllGlError();
+
+        pImage += (kNumberOfScanlinesToUpload * m_imageWidth);
+    }
 
     LOGI("glBindTexture(GL_TEXTURE_2D, 0)");
     glBindTexture(GL_TEXTURE_2D, 0);
