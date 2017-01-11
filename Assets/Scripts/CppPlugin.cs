@@ -15,13 +15,13 @@ public class CppPlugin
     private static extern IntPtr GetRenderEventFunc();
 
     [DllImport ("androidcppnative")]
-    private static extern IntPtr GetStoredTexturePtr();
+    private static extern IntPtr GetCurrStoredTexturePtr();
 
     [DllImport ("androidcppnative")]
-    private static extern int GetStoredImageWidth();
+    private static extern int GetCurrStoredImageWidth();
 
     [DllImport ("androidcppnative")]
-    private static extern int GetStoredImageHeight();
+    private static extern int GetCurrStoredImageHeight();
 
     [DllImport ("androidcppnative")]
     private static extern bool IsLoadingIntoTexture();
@@ -51,6 +51,13 @@ public class CppPlugin
     // Public functions
     // **************************
 
+    // FUNCTION ORDER:
+    // (1) Init() calls glGenTextures() and allocates memory;
+    // (2) LoadIntoWorkingMemoryFromImagePath() calls through to stbi_load() and sets pixels into m_pWorkingMemory
+    // (3) CreateEmptyTexture() calls glTexImage2D() hence allocating the actual texture
+    // (4) LoadScanlinesIntoTextureFromWorkingMemory() is called repeatedly until all scanlines are uploaded to the texture through glTexSubImage2D
+    // (5) Finally CreateExternalTexture() is called with the texture that’s been created beneath us! 
+
     public CppPlugin(MonoBehaviour owner)
     {
         m_owner = owner;
@@ -67,19 +74,6 @@ public class CppPlugin
 
         GL.IssuePluginEvent(GetRenderEventFunc(), (int)RenderFunctions.kTerminate);
     }
-           
-    // FUNCTION ORDER:
-    // - INIT() - Gen textures + allocate memory
-    // - LoadIntoWorkingMemoryFromImagePath(filePathForCpp) - image pixels are now in memory
-    // - LoadIntoTextureFromWorkingMemory()
-
-    // CURRENT PROBLEMS:
-    // - Currently I'm not doing any chuncking, I'm simply calling glTexImage2D() on the Render Thread [I'm not sure how big a problem this is]
-    // - The work that goes in before calling LoadPicturesInternal() puts us out of frame before even entering the function!
-    // - UNSURE ABOUT THIS -> The texture being created with CreateExternalTexture() is being copied (so we run into the same old synchronous problem)
-
-    // FIXED PROBLEMS:
-    // - threadJob.Start() no longer causes a frameout, as I'm now using "ThreadPool"
 
     public IEnumerator LoadImageFromPath(ThreadJob threadJob, GameObject[] imageSpheres, int sphereIndex, string filePath)
     {
@@ -101,11 +95,7 @@ public class CppPlugin
         yield return new WaitForEndOfFrame();
         GL.IssuePluginEvent(GetRenderEventFunc(), (int)RenderFunctions.kCreateEmptyTexture);
         yield return new WaitForSeconds(0.1f); // These waits need to be longer to ensure that GL.IssuePluginEvent() has gone through!
-        Debug.Log("------- VREEL: Finished CreateEmptyTexture(), Texture Handle = " + GetStoredTexturePtr() );
-
-
-        Debug.Log("------- VREEL: Waiting for 5 seconds!");
-        yield return new WaitForSeconds(5); // This is here to see if there's a frameout caused from above function...
+        Debug.Log("------- VREEL: Finished CreateEmptyTexture(), Texture Handle = " + GetCurrStoredTexturePtr() );
 
 
         Debug.Log("------- VREEL: Calling LoadScanlinesIntoTextureFromWorkingMemory()");
@@ -117,16 +107,16 @@ public class CppPlugin
         Debug.Log("------- VREEL: Finished LoadScanlinesIntoTextureFromWorkingMemory()");
 
 
-        Debug.Log("------- VREEL: Calling CreateExternalTexture(), size of Texture is Width x Height = " + GetStoredImageWidth() + " x " + GetStoredImageHeight());
+        Debug.Log("------- VREEL: Calling CreateExternalTexture(), size of Texture is Width x Height = " + GetCurrStoredImageWidth() + " x " + GetCurrStoredImageHeight());
         yield return new WaitForEndOfFrame();
         Texture2D newTexture =
             Texture2D.CreateExternalTexture(
-                GetStoredImageWidth(), 
-                GetStoredImageHeight(), 
+                GetCurrStoredImageWidth(), 
+                GetCurrStoredImageHeight(), 
                 TextureFormat.RGBA32,           // Default textures have a format of ARGB32
                 false,
                 false,
-                GetStoredTexturePtr()
+                GetCurrStoredTexturePtr()
             );
         yield return new WaitForEndOfFrame();
         Debug.Log("------- VREEL: Finished CreateExternalTexture()!");
@@ -172,11 +162,7 @@ public class CppPlugin
         yield return new WaitForEndOfFrame();
         GL.IssuePluginEvent(GetRenderEventFunc(), (int)RenderFunctions.kCreateEmptyTexture);
         yield return new WaitForSeconds(0.1f); // These waits need to be longer to ensure that GL.IssuePluginEvent() has gone through!
-        Debug.Log("------- VREEL: Finished CreateEmptyTexture(), Texture Handle = " + GetStoredTexturePtr() );
-
-
-        Debug.Log("------- VREEL: Waiting for 5 seconds!");
-        yield return new WaitForSeconds(5); // This is here to see if there's a frameout caused from above function...
+        Debug.Log("------- VREEL: Finished CreateEmptyTexture(), Texture Handle = " + GetCurrStoredTexturePtr() );
 
 
         Debug.Log("------- VREEL: Calling LoadScanlinesIntoTextureFromWorkingMemory()");
@@ -188,16 +174,16 @@ public class CppPlugin
         Debug.Log("------- VREEL: Finished LoadScanlinesIntoTextureFromWorkingMemory()");
 
 
-        Debug.Log("------- VREEL: Calling CreateExternalTexture(), size of Texture is Width x Height = " + GetStoredImageWidth() + " x " + GetStoredImageHeight());
+        Debug.Log("------- VREEL: Calling CreateExternalTexture(), size of Texture is Width x Height = " + GetCurrStoredImageWidth() + " x " + GetCurrStoredImageHeight());
         yield return new WaitForEndOfFrame();
         Texture2D newTexture =
             Texture2D.CreateExternalTexture(
-                GetStoredImageWidth(), 
-                GetStoredImageHeight(), 
+                GetCurrStoredImageWidth(), 
+                GetCurrStoredImageHeight(), 
                 TextureFormat.RGBA32,           // Default textures have a format of ARGB32
                 false,
                 false,
-                GetStoredTexturePtr()
+                GetCurrStoredTexturePtr()
             );
         yield return new WaitForEndOfFrame();
         Debug.Log("------- VREEL: Finished CreateExternalTexture()!");

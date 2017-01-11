@@ -10,31 +10,25 @@
 #define  LOG_TAG    "----------------- VREEL: libandroidcppnative"
 #define  LOGI(...)  __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
 
-// DELETE ME...
-//#define GLEW_NO_GLU
-//#include "GLEW/glew.h"
-//#include "GLFW/glfw3.h"
-//#include <EGL/egl.h>
-// DELETE ME...
-
 // **************************
 // Member Variables
 // **************************
 
+int m_numInits = 0; // Acts a bit like a reference counter, ensuring only 1 Init() and 1 Terminate()
+
+const int kNumTextures = 2;
+GLuint m_textureIDs[kNumTextures];
+int m_currTextureIndex = kNumTextures-1; // This is so when the modulus operation is performed, we begin at index 0
+
 const int kMaxImageWidth = 10 * 1024;
 const int kMaxImageHeight = 5 * 1024;
-const int kMaxPixelsPerUpload = 1 * 1024 * 1024;
+stbi_uc* m_pWorkingMemory = NULL;
+int m_currImageWidth = 0;
+int m_currImageHeight = 0;
 
-int m_numInits = 0; // Acts a bit like a reference counter, ensuring only 1 Init() and 1 Terminate() allowed
-
-int m_imageWidth = 0;
-int m_imageHeight = 0;
-
+const int kMaxPixelsUploadedPerFrame = 1 * 1024 * 1024;
 bool m_isLoadingIntoTexture = false;
 GLint m_textureLoadingYOffset = 0;
-
-void* m_pTextureHandle;
-stbi_uc* m_pWorkingMemory = NULL;
 
 // **************************
 // Helper functions
@@ -81,7 +75,7 @@ void TransferAndCorrectAlignmentFromSrcToDest(int* pImage, int* pDest, int width
 // Private functions - accessed through OnRenderEvent()
 // **************************
 
-// These are functions that use OpenGL and hence must be run from the Render Thread!
+// These are functions that use OpenGL and hence must be run from the Render Thread, through C#'s GL.IssuePluginEvent()
 enum RenderFunctions
 {
     kInit = 0,
@@ -96,12 +90,14 @@ void Init()
     {
         LOGI("Calling Init() in C++ Plugin!");
 
-        GLuint textureId;
-        glGenTextures(1, &textureId);
-        m_pTextureHandle = (void*) textureId;
+        LOGI("glGenTextures(%d, m_textureIDs)", kNumTextures);
+        glGenTextures(kNumTextures, m_textureIDs);
         PrintAllGlError();
 
-        LOGI("Genned texture to Handle = %u \n", textureId);
+        for (int i = 0; i < kNumTextures; i++)
+        {
+            LOGI("Genned texture to Handle = %u \n", m_textureIDs[i]);
+        }
 
         m_pWorkingMemory = new stbi_uc[kMaxImageWidth * kMaxImageHeight * sizeof(int32_t)];
 
@@ -119,6 +115,10 @@ void Terminate()
     {
         LOGI("Calling Terminate() in C++ Plugin!");
 
+        LOGI("glDeleteTextures(%d, m_textureIDs)", kNumTextures);
+        glDeleteTextures(kNumTextures, m_textureIDs);
+        PrintAllGlError();
+
         delete[] m_pWorkingMemory;
 
         LOGI("Finished Terminate() in C++ Plugin!");
@@ -129,13 +129,15 @@ void CreateEmptyTexture()
 {
     LOGI("Calling CreateEmptyTexture() in C++ Plugin");
 
+    m_currTextureIndex = (m_currTextureIndex + 1) % kNumTextures;
+
     LOGI("glBindTexture(GL_TEXTURE_2D, textureId)");
-    GLuint textureId = (GLuint)(size_t) m_pTextureHandle;
+    GLuint textureId = m_textureIDs[m_currTextureIndex];
     glBindTexture(GL_TEXTURE_2D, textureId);
     PrintAllGlError();
 
     LOGI("glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_imageWidth, m_imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL");
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_imageWidth, m_imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL); //(unsigned char*) m_pWorkingMemory);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_currImageWidth, m_currImageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL); //(unsigned char*) m_pWorkingMemory);
     PrintAllGlError();
 
     m_isLoadingIntoTexture = true;
@@ -150,24 +152,24 @@ void LoadScanlinesIntoTextureFromWorkingMemory()
     LOGI("Calling LoadScanlinesIntoTextureFromWorkingMemory() in C++ Plugin");
 
     LOGI("glBindTexture(GL_TEXTURE_2D, textureId)");
-    GLuint textureId = (GLuint)(size_t) m_pTextureHandle;
+    GLuint textureId = m_textureIDs[m_currTextureIndex];
     glBindTexture(GL_TEXTURE_2D, textureId);
     PrintAllGlError();
 
     // Each iteration we upload up to kMaxPixelsPerUpload worth of width-long scanlines,
     //  up until the last one where we only upload the remaining scanlines
-    const GLint kIdealNumberOfScanlinesToUpload = kMaxPixelsPerUpload/m_imageWidth;
-    GLsizei height = (m_textureLoadingYOffset + kIdealNumberOfScanlinesToUpload < m_imageHeight)
+    const GLint kIdealNumberOfScanlinesToUpload = kMaxPixelsUploadedPerFrame/m_currImageWidth;
+    GLsizei height = (m_textureLoadingYOffset + kIdealNumberOfScanlinesToUpload < m_currImageHeight)
                      ? kIdealNumberOfScanlinesToUpload
-                     : (m_imageHeight - m_textureLoadingYOffset);
+                     : (m_currImageHeight - m_textureLoadingYOffset);
 
     LOGI("glTexSubImage2D(GL_TEXTURE_2D, 0, 0, %d, m_imageWidth, %d, GL_RGBA, GL_UNSIGNED_BYTE, pImage", m_textureLoadingYOffset, height);
-    unsigned int* pImage = (unsigned int*) m_pWorkingMemory + (m_textureLoadingYOffset * m_imageWidth);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, m_textureLoadingYOffset, m_imageWidth, height, GL_RGBA, GL_UNSIGNED_BYTE, pImage);
+    unsigned int* pImage = (unsigned int*) m_pWorkingMemory + (m_textureLoadingYOffset * m_currImageWidth);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, m_textureLoadingYOffset, m_currImageWidth, height, GL_RGBA, GL_UNSIGNED_BYTE, pImage);
     PrintAllGlError();
 
     m_textureLoadingYOffset += kIdealNumberOfScanlinesToUpload;
-    if (m_textureLoadingYOffset > m_imageHeight)
+    if (m_textureLoadingYOffset > m_currImageHeight)
     {
         m_isLoadingIntoTexture = false;
     }
@@ -212,19 +214,19 @@ bool IsLoadingIntoTexture()
     return m_isLoadingIntoTexture;
 }
 
-void* GetStoredTexturePtr()
+void* GetCurrStoredTexturePtr()
 {
-    return m_pTextureHandle;
+    return (void*)(m_textureIDs[m_currTextureIndex]);
 }
 
-int GetStoredImageWidth()
+int GetCurrStoredImageWidth()
 {
-    return m_imageWidth;
+    return m_currImageWidth;
 }
 
-int GetStoredImageHeight()
+int GetCurrStoredImageHeight()
 {
-    return m_imageHeight;
+    return m_currImageHeight;
 }
 
 bool LoadIntoWorkingMemoryFromImagePath(char* pFileName)
@@ -232,17 +234,21 @@ bool LoadIntoWorkingMemoryFromImagePath(char* pFileName)
     LOGI("Calling LoadIntoWorkingMemoryFromImagePath() in C++ Plugin");
 
     int type = -1;
-    m_imageWidth = 0, m_imageHeight = 0;
+    m_currImageWidth = m_currImageHeight = 0;
 
-    stbi_uc* pImage = stbi_load(pFileName, &m_imageWidth, &m_imageHeight, &type, 4); // Forcing 4-components per pixel RGBA
-    TransferAndCorrectAlignmentFromSrcToDest((int*) pImage, (int*) m_pWorkingMemory, m_imageWidth, m_imageHeight);
+    stbi_uc* pImage = stbi_load(pFileName, &m_currImageWidth, &m_currImageHeight, &type, 4); // Forcing 4-components per pixel RGBA
+    TransferAndCorrectAlignmentFromSrcToDest((int*) pImage, (int*) m_pWorkingMemory, m_currImageWidth, m_currImageHeight);
     stbi_image_free(pImage);
 
-    LOGI("Image Loaded has Width = %d, Height = %d, Type = %d\n", m_imageWidth, m_imageHeight, type);
+    LOGI("Image Loaded has Width = %d, Height = %d, Type = %d\n", m_currImageWidth, m_currImageHeight, type);
+    if (m_currImageWidth * m_currImageHeight > kMaxImageWidth * kMaxImageHeight)
+    {
+        LOGI("ERROR - Image Loaded is greater than Working Memory!!!");
+    }
 
     LOGI("Finished LoadIntoWorkingMemoryFromImagePath() in C++ Plugin!");
 
-    return (m_imageWidth*m_imageHeight) > 0;
+    return (m_currImageWidth * m_currImageHeight) > 0;
 }
 
 bool LoadIntoWorkingMemoryFromImageData(void* pRawData, int dataLength)
@@ -250,17 +256,21 @@ bool LoadIntoWorkingMemoryFromImageData(void* pRawData, int dataLength)
     LOGI("Calling LoadIntoWorkingMemoryFromImageData() in C++ Plugin");
 
     int type = -1;
-    m_imageWidth = 0, m_imageHeight = 0;
+    m_currImageWidth = m_currImageHeight = 0;
 
-    stbi_uc* pImage = stbi_load_from_memory((stbi_uc*) pRawData, dataLength, &m_imageWidth, &m_imageHeight, &type, 4); // Forcing 4-components per pixel RGBA
-    TransferAndCorrectAlignmentFromSrcToDest((int*) pImage, (int*) m_pWorkingMemory, m_imageWidth, m_imageHeight);
+    stbi_uc* pImage = stbi_load_from_memory((stbi_uc*) pRawData, dataLength, &m_currImageWidth, &m_currImageHeight, &type, 4); // Forcing 4-components per pixel RGBA
+    TransferAndCorrectAlignmentFromSrcToDest((int*) pImage, (int*) m_pWorkingMemory, m_currImageWidth, m_currImageHeight);
     stbi_image_free(pImage);
 
-    LOGI("Image Loaded has Width = %d, Height = %d, Type = %d\n", m_imageWidth, m_imageHeight, type);
+    LOGI("Image Loaded has Width = %d, Height = %d, Type = %d\n", m_currImageWidth, m_currImageHeight, type);
+    if (m_currImageWidth * m_currImageHeight > kMaxImageWidth * kMaxImageHeight)
+    {
+        LOGI("ERROR - Image Loaded is greater than Working Memory!!!");
+    }
 
     LOGI("Finished LoadIntoWorkingMemoryFromImageData() in C++ Plugin!");
 
-    return (m_imageWidth*m_imageHeight) > 0;
+    return (m_currImageWidth * m_currImageHeight) > 0;
 }
 
 jstring Java_com_soul_cppplugin_MainActivity_stringFromJNI(JNIEnv *env, jobject /* this */)
