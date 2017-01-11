@@ -23,12 +23,15 @@
 
 const int kMaxImageWidth = 10 * 1024;
 const int kMaxImageHeight = 5 * 1024;
-const int kMaxPixelsPerUpload = 10 * 1024 * 1024;
+const int kMaxPixelsPerUpload = 1 * 1024 * 1024;
 
 int m_numInits = 0; // Acts a bit like a reference counter, ensuring only 1 Init() and 1 Terminate() allowed
 
 int m_imageWidth = 0;
 int m_imageHeight = 0;
+
+bool m_isLoadingIntoTexture = false;
+GLint m_textureLoadingYOffset = 0;
 
 void* m_pTextureHandle;
 stbi_uc* m_pWorkingMemory = NULL;
@@ -82,17 +85,10 @@ void TransferAndCorrectAlignmentFromSrcToDest(int* pImage, int* pDest, int width
 enum RenderFunctions
 {
     kInit = 0,
-    kLoadIntoTextureFromWorkingMemory = 1,
-    kTerminate = 2
+    kCreateEmptyTexture = 1,
+    kLoadScanlinesIntoTextureFromWorkingMemory = 2,
+    kTerminate = 3
 };
-
-// DELETE ME
-//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-//stbi_info(pFileName, &m_imageWidth, &m_imageHeight, &type);
-//stbi_info_from_memory(pAddress, dataLength, &m_imageWidth, &m_imageHeight, &type);
-// DELETE ME
 
 void Init()
 {
@@ -129,9 +125,9 @@ void Terminate()
     }
 }
 
-void LoadIntoTextureFromWorkingMemory()
+void CreateEmptyTexture()
 {
-    LOGI("Calling LoadIntoTextureFromWorkingMemory() in C++ Plugin");
+    LOGI("Calling CreateEmptyTexture() in C++ Plugin");
 
     LOGI("glBindTexture(GL_TEXTURE_2D, textureId)");
     GLuint textureId = (GLuint)(size_t) m_pTextureHandle;
@@ -139,29 +135,44 @@ void LoadIntoTextureFromWorkingMemory()
     PrintAllGlError();
 
     LOGI("glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_imageWidth, m_imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL");
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_imageWidth, m_imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-    //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_imageWidth, m_imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, (unsigned char*) m_pWorkingMemory);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, m_imageWidth, m_imageHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL); //(unsigned char*) m_pWorkingMemory);
     PrintAllGlError();
 
-    unsigned int* pImage = (unsigned int*) m_pWorkingMemory;
+    m_isLoadingIntoTexture = true;
+    m_textureLoadingYOffset = 0;
 
-    // Each iteration we upload a certain number of scanlines, up until the last one where we only do the remaining scanlines
-    const GLint kNumberOfScanlinesToUpload = kMaxPixelsPerUpload/m_imageWidth;
-    for (GLint yOffset = 0; yOffset < m_imageHeight; yOffset += kNumberOfScanlinesToUpload)
+    LOGI("Finished CreateEmptyTexture() in C++ Plugin!");
+}
+
+// This function is called repeatedly like a for-loop with the variable m_textureLoadingYOffset updating every iteration
+void LoadScanlinesIntoTextureFromWorkingMemory()
+{
+    LOGI("Calling LoadScanlinesIntoTextureFromWorkingMemory() in C++ Plugin");
+
+    LOGI("glBindTexture(GL_TEXTURE_2D, textureId)");
+    GLuint textureId = (GLuint)(size_t) m_pTextureHandle;
+    glBindTexture(GL_TEXTURE_2D, textureId);
+    PrintAllGlError();
+
+    // Each iteration we upload up to kMaxPixelsPerUpload worth of width-long scanlines,
+    //  up until the last one where we only upload the remaining scanlines
+    const GLint kIdealNumberOfScanlinesToUpload = kMaxPixelsPerUpload/m_imageWidth;
+    GLsizei height = (m_textureLoadingYOffset + kIdealNumberOfScanlinesToUpload < m_imageHeight)
+                     ? kIdealNumberOfScanlinesToUpload
+                     : (m_imageHeight - m_textureLoadingYOffset);
+
+    LOGI("glTexSubImage2D(GL_TEXTURE_2D, 0, 0, %d, m_imageWidth, %d, GL_RGBA, GL_UNSIGNED_BYTE, pImage", m_textureLoadingYOffset, height);
+    unsigned int* pImage = (unsigned int*) m_pWorkingMemory + (m_textureLoadingYOffset * m_imageWidth);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, m_textureLoadingYOffset, m_imageWidth, height, GL_RGBA, GL_UNSIGNED_BYTE, pImage);
+    PrintAllGlError();
+
+    m_textureLoadingYOffset += kIdealNumberOfScanlinesToUpload;
+    if (m_textureLoadingYOffset > m_imageHeight)
     {
-        GLsizei height = (yOffset + kNumberOfScanlinesToUpload < m_imageHeight) ? kNumberOfScanlinesToUpload : (m_imageHeight - yOffset);
-
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, yOffset, m_imageWidth, height, GL_RGBA, GL_UNSIGNED_BYTE, pImage);
-        PrintAllGlError();
-
-        pImage += (kNumberOfScanlinesToUpload * m_imageWidth);
+        m_isLoadingIntoTexture = false;
     }
 
-    LOGI("glBindTexture(GL_TEXTURE_2D, 0)");
-    glBindTexture(GL_TEXTURE_2D, 0);
-    PrintAllGlError();
-
-    LOGI("Finished LoadIntoPixelsFromImagePath() in C++ Plugin!");
+    LOGI("Finished LoadScanlinesIntoTextureFromWorkingMemory() in C++ Plugin! Loading in progress = %d", m_isLoadingIntoTexture);
 }
 
 static void UNITY_INTERFACE_API OnRenderEvent(int eventID)
@@ -170,9 +181,17 @@ static void UNITY_INTERFACE_API OnRenderEvent(int eventID)
     {
         Init();
     }
-    else if (eventID == kLoadIntoTextureFromWorkingMemory)
+    else if (eventID == kCreateEmptyTexture)
     {
-        LoadIntoTextureFromWorkingMemory();
+        CreateEmptyTexture();
+    }
+    else if (eventID == kLoadScanlinesIntoTextureFromWorkingMemory)
+    {
+        LoadScanlinesIntoTextureFromWorkingMemory();
+    }
+    else if (eventID == kTerminate)
+    {
+        Terminate();
     }
 }
 
@@ -183,9 +202,14 @@ static void UNITY_INTERFACE_API OnRenderEvent(int eventID)
 extern "C"
 {
 
-UnityRenderingEvent GetRenderEventFunc() //UNITY_INTERFACE_EXPORT UNITY_INTERFACE_API
+UnityRenderingEvent GetRenderEventFunc()
 {
     return OnRenderEvent;
+}
+
+bool IsLoadingIntoTexture()
+{
+    return m_isLoadingIntoTexture;
 }
 
 void* GetStoredTexturePtr()
