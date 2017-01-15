@@ -14,7 +14,7 @@ public class FPSDisplay : MonoBehaviour
         float fps = 1.0f / deltaTime;
         if (fps < kFrameOutThreshold)
         {
-            Debug.Log("------- VREEL: We are Framing out at FPS = " + fps);
+            Debug.Log("------- Texture2DTest: We are Framing out at FPS = " + fps);
         }
     }
 

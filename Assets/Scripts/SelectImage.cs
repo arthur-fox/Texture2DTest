@@ -6,13 +6,13 @@ public class SelectImage : MonoBehaviour
     public float m_scalingFactor = 0.88f;
     public float m_defaultScale = 1.0f;
 
-    private Texture2D m_imageSphereTexture;
+    private Texture2D m_imageTexture;
     private string m_imageFilePath; 
     private string kEmptyString = "emptyString";
 
     public void Awake()
     {
-        m_imageSphereTexture = new Texture2D(2,2);
+        m_imageTexture = new Texture2D(2,2);
     }
 
     public string GetImageFilePath()
@@ -23,7 +23,7 @@ public class SelectImage : MonoBehaviour
     public void SetImageAndFilePath(Texture2D texture, string filePath)
     {
         m_imageFilePath = filePath;
-        m_imageSphereTexture = texture;
+        m_imageTexture = texture;
 
         StartCoroutine(AnimateSetTexture());
     }
@@ -44,7 +44,7 @@ public class SelectImage : MonoBehaviour
             yield return new WaitForEndOfFrame();
         }
 
-        gameObject.GetComponent<MeshRenderer>().material.mainTexture = m_imageSphereTexture;
+        gameObject.GetComponent<MeshRenderer>().material.mainTexture = m_imageTexture;
 
         while (transform.localScale.magnitude < m_defaultScale)
         {

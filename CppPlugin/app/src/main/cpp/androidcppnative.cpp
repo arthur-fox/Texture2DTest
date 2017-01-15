@@ -7,7 +7,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-#define  LOG_TAG    "----------------- VREEL: libandroidcppnative"
+#define  LOG_TAG    "----------------- Texture2DTest: libandroidcppnative"
 #define  LOGI(...)  __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
 
 // **************************

@@ -36,6 +36,7 @@ public class CppPlugin
     // Member Variables
     // **************************
 
+    private const float kFrameWaitTime = 2/60.0f; // wait 2 frames, to ensure GL call has gone through
     private MonoBehaviour m_owner = null;
 
     // These are functions that use OpenGL and hence must be run from the Render Thread!
@@ -61,7 +62,7 @@ public class CppPlugin
     public CppPlugin(MonoBehaviour owner)
     {
         m_owner = owner;
-        Debug.Log("------- VREEL: A CppPlugin was created by = " + m_owner.name);
+        Debug.Log("------- Texture2DTest: A CppPlugin was created by = " + m_owner.name);
 
         GL.IssuePluginEvent(GetRenderEventFunc(), (int)RenderFunctions.kInit);
 
@@ -70,44 +71,44 @@ public class CppPlugin
         
     ~CppPlugin()
     {
-        Debug.Log("------- VREEL: A CppPlugin was destructed by = " + m_owner.name);
+        Debug.Log("------- Texture2DTest: A CppPlugin was destructed by = " + m_owner.name);
 
         GL.IssuePluginEvent(GetRenderEventFunc(), (int)RenderFunctions.kTerminate);
     }
 
-    public IEnumerator LoadImageFromPath(ThreadJob threadJob, GameObject[] imageSpheres, int sphereIndex, string filePath)
+    public IEnumerator LoadImageFromPath(ThreadJob threadJob, GameObject[] imageDisplays, int imageIndex, string filePath)
     {
         yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: Calling LoadPicturesInternal() from filePath: " + filePath);
+        Debug.Log("------- Texture2DTest: Calling LoadPicturesInternal() from filePath: " + filePath);
         StringBuilder filePathForCpp = new StringBuilder(filePath);
 
-        Debug.Log("------- VREEL: Calling LoadIntoWorkingMemoryFromImagePath(), on background thread!");
+        Debug.Log("------- Texture2DTest: Calling LoadIntoWorkingMemoryFromImagePath(), on background thread!");
         yield return threadJob.WaitFor();
         bool ranJobSuccessfully = false;
         threadJob.Start( () => 
             ranJobSuccessfully = LoadIntoWorkingMemoryFromImagePath(filePathForCpp)
         );
         yield return threadJob.WaitFor();
-        Debug.Log("------- VREEL: Finished LoadIntoWorkingMemoryFromImagePath(), ran Job Successully = " + ranJobSuccessfully); 
+        Debug.Log("------- Texture2DTest: Finished LoadIntoWorkingMemoryFromImagePath(), ran Job Successully = " + ranJobSuccessfully); 
 
 
-        Debug.Log("------- VREEL: Calling CreateEmptyTexture()");
+        Debug.Log("------- Texture2DTest: Calling CreateEmptyTexture()");
         yield return new WaitForEndOfFrame();
         GL.IssuePluginEvent(GetRenderEventFunc(), (int)RenderFunctions.kCreateEmptyTexture);
-        yield return new WaitForSeconds(0.1f); // These waits need to be longer to ensure that GL.IssuePluginEvent() has gone through!
-        Debug.Log("------- VREEL: Finished CreateEmptyTexture(), Texture Handle = " + GetCurrStoredTexturePtr() );
+        yield return new WaitForSeconds(kFrameWaitTime); // These waits need to be longer to ensure that GL.IssuePluginEvent() has gone through!
+        Debug.Log("------- Texture2DTest: Finished CreateEmptyTexture(), Texture Handle = " + GetCurrStoredTexturePtr() );
 
 
-        Debug.Log("------- VREEL: Calling LoadScanlinesIntoTextureFromWorkingMemory()");
+        Debug.Log("------- Texture2DTest: Calling LoadScanlinesIntoTextureFromWorkingMemory()");
         while (IsLoadingIntoTexture())
         {            
             GL.IssuePluginEvent(GetRenderEventFunc(), (int)RenderFunctions.kLoadScanlinesIntoTextureFromWorkingMemory);
-            yield return new WaitForSeconds(0.1f);
+            yield return new WaitForSeconds(kFrameWaitTime);
         }
-        Debug.Log("------- VREEL: Finished LoadScanlinesIntoTextureFromWorkingMemory()");
+        Debug.Log("------- Texture2DTest: Finished LoadScanlinesIntoTextureFromWorkingMemory()");
 
 
-        Debug.Log("------- VREEL: Calling CreateExternalTexture(), size of Texture is Width x Height = " + GetCurrStoredImageWidth() + " x " + GetCurrStoredImageHeight());
+        Debug.Log("------- Texture2DTest: Calling CreateExternalTexture(), size of Texture is Width x Height = " + GetCurrStoredImageWidth() + " x " + GetCurrStoredImageHeight());
         yield return new WaitForEndOfFrame();
         Texture2D newTexture =
             Texture2D.CreateExternalTexture(
@@ -119,105 +120,14 @@ public class CppPlugin
                 GetCurrStoredTexturePtr()
             );
         yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: Finished CreateExternalTexture()!");
+        Debug.Log("------- Texture2DTest: Finished CreateExternalTexture()!");
 
 
-        Debug.Log("------- VREEL: Calling SetImageAndFilePath()");
-        imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(newTexture, filePath);
+        Debug.Log("------- Texture2DTest: Calling SetImageAndFilePath()");
+        imageDisplays[imageIndex].GetComponent<SelectImage>().SetImageAndFilePath(newTexture, filePath);
         yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: Finished SetImageAndFilePath()");
+        Debug.Log("------- Texture2DTest: Finished SetImageAndFilePath()");
 
         Resources.UnloadUnusedAssets();
-    }   
-
-    public IEnumerator LoadImageFromStream(ThreadJob threadJob, Stream imageStream, GameObject[] imageSpheres, int sphereIndex, string filePath)
-    {        
-        yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: ConvertStreamAndSetImage for " + filePath);
-
-        Debug.Log("------- VREEL: Calling ToByteArray(), on background thread!");
-        yield return threadJob.WaitFor();
-        bool ranJobSuccessfully = false;
-        byte[] myBinary = null;
-        threadJob.Start( () => 
-            ranJobSuccessfully = ToByteArray(imageStream, ref myBinary)
-        );
-        yield return threadJob.WaitFor();
-        Debug.Log("------- VREEL: Finished ToByteArray(), ran Job Successully = " + ranJobSuccessfully);
-
-        Debug.Log("------- VREEL: Calling LoadIntoWorkingMemoryFromImagePath(), on background thread!");
-        GCHandle rawDataHandle = GCHandle.Alloc(myBinary, GCHandleType.Pinned);
-        IntPtr rawDataPtr = rawDataHandle.AddrOfPinnedObject();
-        yield return threadJob.WaitFor();
-        ranJobSuccessfully = false;
-        threadJob.Start( () => 
-            ranJobSuccessfully = LoadIntoWorkingMemoryFromImageData(rawDataPtr, myBinary.Length)
-        );
-        yield return threadJob.WaitFor();
-        rawDataHandle.Free();
-        Debug.Log("------- VREEL: Finished LoadIntoWorkingMemoryFromImagePath(), ran Job Successully = " + ranJobSuccessfully); 
-
-
-        Debug.Log("------- VREEL: Calling CreateEmptyTexture()");
-        yield return new WaitForEndOfFrame();
-        GL.IssuePluginEvent(GetRenderEventFunc(), (int)RenderFunctions.kCreateEmptyTexture);
-        yield return new WaitForSeconds(0.1f); // These waits need to be longer to ensure that GL.IssuePluginEvent() has gone through!
-        Debug.Log("------- VREEL: Finished CreateEmptyTexture(), Texture Handle = " + GetCurrStoredTexturePtr() );
-
-
-        Debug.Log("------- VREEL: Calling LoadScanlinesIntoTextureFromWorkingMemory()");
-        while (IsLoadingIntoTexture())
-        {            
-            GL.IssuePluginEvent(GetRenderEventFunc(), (int)RenderFunctions.kLoadScanlinesIntoTextureFromWorkingMemory);
-            yield return new WaitForSeconds(0.1f);
-        }
-        Debug.Log("------- VREEL: Finished LoadScanlinesIntoTextureFromWorkingMemory()");
-
-
-        Debug.Log("------- VREEL: Calling CreateExternalTexture(), size of Texture is Width x Height = " + GetCurrStoredImageWidth() + " x " + GetCurrStoredImageHeight());
-        yield return new WaitForEndOfFrame();
-        Texture2D newTexture =
-            Texture2D.CreateExternalTexture(
-                GetCurrStoredImageWidth(), 
-                GetCurrStoredImageHeight(), 
-                TextureFormat.RGBA32,           // Default textures have a format of ARGB32
-                false,
-                false,
-                GetCurrStoredTexturePtr()
-            );
-        yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: Finished CreateExternalTexture()!");
-
-
-        Debug.Log("------- VREEL: Calling SetImageAndFilePath()");
-        imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(newTexture, filePath);
-        yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: Finished SetImageAndFilePath()");
-
-        Resources.UnloadUnusedAssets();
-    }        
-
-    // **************************
-    // Private/Helper functions
-    // **************************
-
-    private bool ToByteArray(Stream stream, ref byte[] outBinary)
-    {                
-        const int kBlockSize = 1024;
-        byte[] buf = new byte[kBlockSize];
-        using( MemoryStream ms = new MemoryStream() ) 
-        {            
-            int byteCount = 0;
-            do
-            {
-                byteCount = stream.Read(buf, 0, kBlockSize);
-                ms.Write(buf, 0, byteCount);
-            }
-            while(stream.CanRead && byteCount > 0);
-
-            outBinary = ms.ToArray();
-        }
-
-        return true;
     }
 }

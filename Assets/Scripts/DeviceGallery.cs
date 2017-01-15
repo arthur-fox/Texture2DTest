@@ -1,21 +1,19 @@
 ﻿using UnityEngine;
 using UnityEngine.Networking;           //UnityWebRequest
-using System;                           // IntPtr
+using System;                           //IntPtr
 using System.IO;                        //DirectoryInfo
 using System.Collections;               //IEnumerator
 using System.Collections.Generic;       //List
 
 public class DeviceGallery : MonoBehaviour 
 {
-    public GameObject[] m_imageSpheres;
+    public GameObject[] m_imageDisplays;
 
     private int m_currPictureIndex = 0;
     private List<string> m_pictureFilePaths;
-    private static readonly List<string> ImageExtensions = new List<string> { ".JPG", ".JPE", ".BMP", ".GIF", ".PNG" };
     private CoroutineQueue m_coroutineQueue;
     private ThreadJob m_threadJob;
     private CppPlugin m_cppPlugin;
-    private AndroidJavaClass m_javaPlugin;
 
     public void Start()
     {        
@@ -26,9 +24,6 @@ public class DeviceGallery : MonoBehaviour
 
         m_threadJob = new ThreadJob(this);
         m_cppPlugin = new CppPlugin(this);
-
-        AndroidJNI.AttachCurrentThread();
-        m_javaPlugin = new AndroidJavaClass("com.DefaultCompany.Texture2DTest.JavaPlugin");
     }
 
     public bool IsIndexAtStart()
@@ -38,105 +33,102 @@ public class DeviceGallery : MonoBehaviour
 
     public bool IsIndexAtEnd()
     {
-        int numImageSpheres = m_imageSpheres.GetLength(0);
+        int numImageDisplays = m_imageDisplays.GetLength(0);
         int numFiles = m_pictureFilePaths.Count;
-        return m_currPictureIndex >= (numFiles - numImageSpheres);       
+        return m_currPictureIndex >= (numFiles - numImageDisplays);       
     }
 
     public void OpenAndroidGallery()
     {
-        Debug.Log("------- VREEL: OpenAndroidGallery() called");
+        m_coroutineQueue.EnqueueAction(OpenAndroidGalleryInternal());
+    }        
+
+    private IEnumerator OpenAndroidGalleryInternal()
+    {
+        Debug.Log("------- Texture2DTest: OpenAndroidGallery() called");
 
         m_currPictureIndex = 0;
         m_pictureFilePaths.Clear();
-        string path = "/storage/emulated/0/DCIM/Gear 360/"; //HARDCODED: Hardcoded path to 360 images, 
-                                                            //this may need to be changed depending on device used
+        string path = "/storage/emulated/0/DCIM/"; //HARDCODED: Hardcoded path, 
+        //this may need to be changed depending on device used
 
-        Debug.Log("------- VREEL: Storing all FilePaths from directory: " + path);
+        Debug.Log("------- Texture2DTest: Storing all FilePaths from directory: " + path);
 
-        StoreAllFilePaths(path);
+        bool foundJob = false;
+        m_threadJob.Start( () => 
+            foundJob = StoreAllFilePaths(path)
+        );
+        yield return m_threadJob.WaitFor();
 
-        int numImageSpheres = m_imageSpheres.GetLength(0);
-        LoadPictures(m_currPictureIndex, numImageSpheres);
-    }        
+        int numImageDisplays = m_imageDisplays.GetLength(0);
+        LoadPictures(m_currPictureIndex, numImageDisplays);
+    }
 
-    private void StoreAllFilePaths(string path)
+    private static readonly List<string> ImageExtensions = new List<string> { ".JPG", ".JPE", ".BMP", ".GIF", ".PNG" };
+    private bool StoreAllFilePaths(string path)
     {
-        foreach (string filePath in System.IO.Directory.GetFiles(path))
+        foreach (string filePath in System.IO.Directory.GetFiles(path, "*", SearchOption.AllDirectories))
         { 
             if (ImageExtensions.Contains(Path.GetExtension(filePath).ToUpperInvariant())) // Check that the file is indeed an image
             {                
-                m_pictureFilePaths.Add(filePath);
+                m_pictureFilePaths.Add(filePath); // We only need a single image in m_pictureFilePaths
+                break;
             }
         }
 
         m_pictureFilePaths.Reverse(); // Reversing to have the pictures appear in the order of newest first
+
+        return m_pictureFilePaths.Count > 0;
     }
 
     private void LoadPictures(int startingPictureIndex, int numImages)
     {
-        Debug.Log(string.Format("------- VREEL: Loading {0} pictures beginning at index {1}. There are {2} pictures in the gallery!", 
+        Debug.Log(string.Format("------- Texture2DTest: Loading {0} pictures beginning at index {1}. There are {2} pictures in the gallery!", 
             numImages, startingPictureIndex, m_pictureFilePaths.Count));
 
         Resources.UnloadUnusedAssets();
 
         int currPictureIndex = startingPictureIndex;
-        for (int sphereIndex = 0; sphereIndex < numImages; sphereIndex++, currPictureIndex++)
+        for (int imageIndex = 0; imageIndex < numImages; imageIndex++, currPictureIndex++)
         {
             if (currPictureIndex < m_pictureFilePaths.Count)
             {                   
                 string filePath = m_pictureFilePaths[currPictureIndex];
-                m_coroutineQueue.EnqueueAction(LoadImageInternalPluginCpp(filePath, sphereIndex));
+                m_coroutineQueue.EnqueueAction(LoadImageInternalPluginCpp(filePath, imageIndex));
                 m_coroutineQueue.EnqueueWait(2.0f);
             }
             else
             {
-                m_imageSpheres[sphereIndex].GetComponent<SelectImage>().Hide();
+                m_imageDisplays[imageIndex].GetComponent<SelectImage>().Hide();
             }
         }
 
         Resources.UnloadUnusedAssets();
     }
 
-    private IEnumerator LoadImageInternalPluginCpp(string filePath, int sphereIndex)
+    private IEnumerator LoadImageInternalPluginCpp(string filePath, int imageIndex)
     {   
-        Debug.Log("------- VREEL: Called LoadImageInternalPluginCpp()");
-        yield return m_cppPlugin.LoadImageFromPath(m_threadJob, m_imageSpheres, sphereIndex, filePath);
+        Debug.Log("------- Texture2DTest: Called LoadImageInternalPluginCpp()");
+        yield return m_cppPlugin.LoadImageFromPath(m_threadJob, m_imageDisplays, imageIndex, filePath);
     }
 
-    private IEnumerator LoadImageInternalPluginJava(string filePath, int sphereIndex)
-    {           
-        Texture2D myNewTexture2D = new Texture2D(1920, 1080, TextureFormat.RGBA32, false);
-
-        Debug.Log("------- VREEL: Calling LoadImageReturnTexturePtr()");
-        Int32 texturePtr = m_javaPlugin.Call <Int32> ("LoadImageReturnTexturePtr", filePath);
-        Debug.Log("------- VREEL: Finished LoadImageIntoTexture(), returned pointer: " + texturePtr);
-
-        Texture2D nativeTexture = Texture2D.CreateExternalTexture (1920, 1080, TextureFormat.RGBA32, false, false, (IntPtr)texturePtr);
-        myNewTexture2D.UpdateExternalTexture(nativeTexture.GetNativeTexturePtr());
-
-        m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(myNewTexture2D, filePath);
-
-        yield break;
-    }
-
-    private IEnumerator LoadImageInternalUnity(string filePath, int sphereIndex)
+    private IEnumerator LoadImageInternalUnity(string filePath, int imageIndex)
     {
-        Debug.Log("------- VREEL: Calling LoadPicturesInternalUnity() from filePath: " + filePath);
+        Debug.Log("------- Texture2DTest: Calling LoadPicturesInternalUnity() from filePath: " + filePath);
         
         WWW www = new WWW("file://" + filePath);
         yield return www;
 
-        Debug.Log("------- VREEL: Calling LoadImageIntoTexture()");
+        Debug.Log("------- Texture2DTest: Calling LoadImageIntoTexture()");
         Texture2D myNewTexture2D = new Texture2D(2,2);
         www.LoadImageIntoTexture(myNewTexture2D);
         yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: Finished LoadImageIntoTexture()");
+        Debug.Log("------- Texture2DTest: Finished LoadImageIntoTexture()");
 
-        Debug.Log("------- VREEL: Calling SetImageAndFilePath()");
-        m_imageSpheres[sphereIndex].GetComponent<SelectImage>().SetImageAndFilePath(myNewTexture2D, filePath);
+        Debug.Log("------- Texture2DTest: Calling SetImageAndFilePath()");
+        m_imageDisplays[imageIndex].GetComponent<SelectImage>().SetImageAndFilePath(myNewTexture2D, filePath);
         yield return new WaitForEndOfFrame();
-        Debug.Log("------- VREEL: Finished SetImageAndFilePath()");
+        Debug.Log("------- Texture2DTest: Finished SetImageAndFilePath()");
 
         Resources.UnloadUnusedAssets();
     }

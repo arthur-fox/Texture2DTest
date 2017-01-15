@@ -49,8 +49,6 @@ public class ThreadJob
     {
         Debug.Log("------- VREEL: Start on Thread has been called!");
 
-        //TODO: Make the ThreadFunc have its own "IsDone" flag, 
-        //      because the current method means that only one ThreadFunc is allowed to run at a time...
         m_threadFunc = threadFunc;
         IsDone = false;
         ThreadPool.QueueUserWorkItem(Run);
